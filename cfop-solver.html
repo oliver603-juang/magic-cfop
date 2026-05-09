@@ -1,0 +1,1047 @@
+<!DOCTYPE html>
+<html lang="zh-TW"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="theme-color" content="#000">
+<title>魔方小老師 LBL</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&display=swap');
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{font-family:'Nunito',sans-serif;background:#000;color:#fff;height:100dvh;overflow:hidden;display:flex;flex-direction:column}
+.wrap{position:relative;flex:1;overflow:hidden}
+video{width:100%;height:100%;object-fit:cover}
+canvas#ov{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none}
+.top-bar{position:absolute;top:0;left:0;right:0;z-index:10;padding:10px 16px;text-align:center;background:linear-gradient(rgba(0,0,0,.8),transparent);padding-bottom:28px}
+.top-title{font-size:18px;font-weight:900;color:#FFD700}
+.top-sub{font-size:12px;color:#ddd;margin-top:2px}
+.top-dots{display:flex;justify-content:center;gap:5px;margin-top:6px}
+.td{width:20px;height:5px;border-radius:3px;background:rgba(255,255,255,.15)}.td.done{background:#00D2FF}.td.now{background:#FFD700;width:32px}
+.bot-bar{position:absolute;bottom:0;left:0;right:0;z-index:10;padding:8px 16px 20px;background:linear-gradient(transparent,rgba(0,0,0,.9));padding-top:24px;text-align:center}
+.info{font-size:13px;color:rgba(255,255,255,.7);margin-bottom:8px}
+.mgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;width:78px;margin:0 auto 8px}
+.mcell{height:22px;border-radius:3px;border:1px solid rgba(255,255,255,.15)}
+.btn{padding:14px 32px;border:none;border-radius:12px;font-family:'Nunito',sans-serif;font-weight:900;font-size:16px;cursor:pointer;background:#FFD700;color:#000;min-width:120px}
+.btn:active{transform:scale(.96);opacity:.9}
+.btn-sm{padding:10px 20px;font-size:14px}
+.btn-row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+.overlay{display:none;position:absolute;inset:0;z-index:25;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,0,0,.92)}
+.overlay.show{display:flex}
+.sd{width:16px;height:16px;border-radius:4px;font-size:7px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.08);color:rgba(255,255,255,.3);font-family:monospace;font-weight:700}
+.sd.now{background:#FFD700;color:#000}.sd.done{background:rgba(0,210,255,.25);color:#00D2FF}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes confetti-fall{0%{transform:translateY(0) rotate(0deg);opacity:1}100%{transform:translateY(100vh) rotate(720deg);opacity:0}}
+</style></head><body>
+<div class="wrap">
+<video id="vid" autoplay playsinline muted></video><canvas id="ov"></canvas>
+<div class="top-bar" id="topBar"><div class="top-title" id="title">🧊 魔方小老師</div><div class="top-sub" id="sub"></div><div class="top-dots" id="dots"></div></div>
+<div class="bot-bar" id="botBar" style="display:none"><div class="info" id="info"></div><div class="mgrid" id="mgrid" style="display:none"></div><div class="btn-row" id="btnRow"></div></div>
+<div id="solveUI" style="display:none;position:absolute;inset:0;z-index:10;background:#000;flex-direction:column;align-items:center;justify-content:space-between;padding:10px 16px 16px;overflow-y:auto">
+ <div style="text-align:center;width:100%"><div id="stageLabel" style="margin-bottom:2px"></div><div style="font-size:11px;color:rgba(255,255,255,.4)">操作前（前紅面）</div><div class="mgrid" id="beforeGrid" style="display:grid;margin:4px auto"></div></div>
+ <div style="text-align:center;width:100%;flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center">
+  <div style="font-size:36px;font-weight:900;color:#FFD700;font-family:'Courier New',monospace" id="sMoveLabel">-</div>
+  <div style="font-size:15px;color:#eee;margin-top:2px" id="sMoveDesc">-</div>
+  <div style="font-size:11px;color:rgba(255,255,255,.4);margin-top:4px" id="sMoveProg">-</div>
+  <div id="sMoveVis" style="margin-top:10px"></div>
+ </div>
+ <div style="text-align:center;width:100%"><div style="font-size:11px;color:rgba(255,255,255,.4)">操作後</div><div class="mgrid" id="afterGrid" style="display:grid;margin:4px auto"></div><div class="btn-row" id="sBtnRow" style="margin-top:8px"></div></div>
+</div>
+<div class="overlay show" id="startOv">
+ <div style="font-size:48px;margin-bottom:8px">🧊</div>
+ <div style="font-size:24px;font-weight:900;color:#FFD700">魔方小老師</div>
+ <div style="font-size:15px;font-weight:800;color:#00D2FF;margin-top:2px">CFOP 速解法</div>
+ <div style="font-size:13px;color:rgba(255,255,255,.5);margin-top:10px;max-width:280px;text-align:center;line-height:1.6">📸 拍攝6面 → 🧩 CFOP四步教學<br>全程白色朝上！適合初學者</div>
+ <button class="btn" style="margin-top:20px;font-size:18px;padding:16px 40px" onclick="startApp()">📸 開始掃描</button>
+ <button class="btn btn-sm" style="margin-top:10px;background:rgba(255,255,255,.12);color:#ccc" onclick="startManual()">✏️ 手動輸入顏色</button>
+</div>
+<div class="overlay" id="doneOv">
+ <div style="font-size:64px">🎉</div>
+ <div style="font-size:24px;font-weight:900;color:#00D2FF;margin-top:8px">魔方還原完成！</div>
+ <div style="font-size:14px;color:rgba(255,255,255,.5);margin-top:4px">太厲害了！你做到了！</div>
+ <button class="btn" style="margin-top:16px" onclick="location.reload()">再來一次</button>
+</div>
+</div>
+<script>
+// ===== CONSTANTS =====
+const SCAN_SEQ=[
+  {f:'F',name:'前（紅）',guide:'上白朝天，前紅對鏡頭'},
+  {f:'R',name:'右（藍）',guide:'順時針轉90°，右藍對鏡頭'},
+  {f:'B',name:'後（橘）',guide:'再轉90°，後橘對鏡頭'},
+  {f:'L',name:'左（綠）',guide:'再轉90°，左綠對鏡頭'},
+  {f:'U',name:'上（白）',guide:'轉回前紅，往前傾，上白對鏡頭'},
+  {f:'D',name:'下（黃）',guide:'往後傾180°，下黃對鏡頭'},
+];
+const CMAP={W:'#FFFFFF',R:'#B71234',B:'#0046AD',O:'#FF5800',G:'#009B48',Y:'#FFD500'};
+const CC={F:'R',R:'B',B:'O',L:'G',U:'W',D:'Y'};
+const C2F={W:'U',B:'R',R:'F',Y:'D',G:'L',O:'B'};
+const FLABEL={U:'上白',R:'右藍',F:'前紅',D:'下黃',L:'左綠',B:'後橘'};
+const MDESC_KID={};
+MDESC_KID['R']='右邊 推上去 ⬆';MDESC_KID["R'"]='右邊 拉下來 ⬇';MDESC_KID['R2']='右邊 推兩次 ⬆⬆';
+MDESC_KID['U']='上面 往左推 ⬅';MDESC_KID["U'"]='上面 往右推 ➡';MDESC_KID['U2']='上面 轉半圈';
+MDESC_KID['D']='下面 往右推 ➡';MDESC_KID["D'"]='下面 往左推 ⬅';MDESC_KID['D2']='下面 轉半圈';
+MDESC_KID['L']='左邊 拉下來 ⬇';MDESC_KID["L'"]='左邊 推上去 ⬆';MDESC_KID['L2']='左邊 推兩次';
+MDESC_KID['F']='正面 順時針轉 ↻';MDESC_KID["F'"]='正面 逆時針轉 ↺';MDESC_KID['F2']='正面 轉半圈';
+MDESC_KID['B']='後面 順時針轉 ↻';MDESC_KID["B'"]='後面 逆時針轉 ↺';MDESC_KID['B2']='後面 轉半圈';
+window.CN={W:'白',B:'藍',R:'紅',Y:'黃',G:'綠',O:'橘'};
+
+let vid,ov,octx;
+let rawData={},faceColors={},cubeState={};
+let scanIdx=0,solution=[],solveStep=-1;
+let mode='start';
+
+// ===== CAMERA =====
+async function startApp(){
+  document.getElementById('startOv').classList.remove('show');
+  vid=document.getElementById('vid');ov=document.getElementById('ov');octx=ov.getContext('2d');
+  try{
+    const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280},height:{ideal:720}}});
+    vid.srcObject=s;await vid.play();
+    ov.width=vid.videoWidth||720;ov.height=vid.videoHeight||1280;
+    mode='scan';scanIdx=0;showScanUI();
+  }catch(e){alert('相機錯誤: '+e.message);}
+}
+function startManual(){
+  document.getElementById('startOv').classList.remove('show');
+  document.getElementById('startOv').style.display='none';
+  document.querySelector('.wrap').style.background='#000';
+  if(vid)vid.style.display='none';
+  ['U','R','F','D','L','B'].forEach(f=>{faceColors[f]=['W','W','W','W',CC[f],'W','W','W','W'];});
+  // Set centers correctly
+  faceColors.U[4]='W';faceColors.R[4]='B';faceColors.F[4]='R';faceColors.D[4]='Y';faceColors.L[4]='G';faceColors.B[4]='O';
+  document.getElementById('topBar').style.display='block';
+  document.getElementById('botBar').style.display='block';
+  document.getElementById('title').textContent='✏️ 手動輸入';
+  document.getElementById('sub').textContent='點擊格子切換顏色，中心格不能改';
+  document.getElementById('info').textContent='完成後按下方按鈕';
+  showEditableFaces();
+  document.getElementById('btnRow').innerHTML='<button class="btn" onclick="doManualSolve()">🧩 LBL 解題！</button>';
+}
+function showScanUI(){
+  const info=SCAN_SEQ[scanIdx];
+  document.getElementById('title').textContent=info.name;
+  document.getElementById('sub').textContent=info.guide;
+  document.getElementById('dots').innerHTML=SCAN_SEQ.map((_,i)=>'<div class="td'+(i<scanIdx?' done':'')+(i===scanIdx?' now':'')+'"></div>').join('');
+  document.getElementById('botBar').style.display='block';
+  document.getElementById('info').textContent='對準框框後按下拍照';
+  document.getElementById('mgrid').style.display='none';
+  document.getElementById('btnRow').innerHTML='<button class="btn" onclick="doScanCapture()">📸 拍照</button>';
+  drawGuideGrid();
+}
+function drawGuideGrid(){
+  if(!ov||!ov.width)return;
+  const vw=ov.width,vh=ov.height;octx.clearRect(0,0,vw,vh);
+  const gs=Math.min(vw,vh)*0.82,cs=gs/3,sx=(vw-gs)/2,sy=(vh-gs)/2;
+  octx.fillStyle='rgba(0,0,0,.25)';
+  octx.fillRect(0,0,vw,sy);octx.fillRect(0,sy+gs,vw,vh-sy-gs);octx.fillRect(0,sy,sx,gs);octx.fillRect(sx+gs,sy,vw-sx-gs,gs);
+  octx.strokeStyle='rgba(255,215,0,.5)';octx.lineWidth=1.5;
+  for(let i=0;i<=3;i++){octx.beginPath();octx.moveTo(sx+i*cs,sy);octx.lineTo(sx+i*cs,sy+gs);octx.stroke();octx.beginPath();octx.moveTo(sx,sy+i*cs);octx.lineTo(sx+gs,sy+i*cs);octx.stroke();}
+  octx.strokeStyle='#FFD700';octx.lineWidth=3;
+  [[sx,sy],[sx+gs,sy],[sx,sy+gs],[sx+gs,sy+gs]].forEach(([x,y])=>{const dx=x===sx?1:-1,dy=y===sy?1:-1;octx.beginPath();octx.moveTo(x+14*dx,y);octx.lineTo(x,y);octx.lineTo(x,y+14*dy);octx.stroke();});
+}
+function doScanCapture(){
+  if(!vid.videoWidth)return;
+  const vw=vid.videoWidth,vh=vid.videoHeight,tc=document.createElement('canvas');tc.width=vw;tc.height=vh;
+  const tctx=tc.getContext('2d');tctx.drawImage(vid,0,0,vw,vh);
+  const gs=Math.min(vw,vh)*0.82,cs=gs/3,sx=(vw-gs)/2,sy=(vh-gs)/2;
+  let rgbs=[];
+  for(let r=0;r<3;r++)for(let c=0;c<3;c++){
+    const px=Math.round(sx+(c+.5)*cs),py=Math.round(sy+(r+.5)*cs);
+    const d=tctx.getImageData(px-5,py-5,11,11);let rr=0,gg=0,bb=0;
+    for(let i=0;i<d.data.length;i+=4){rr+=d.data[i];gg+=d.data[i+1];bb+=d.data[i+2];}
+    const n=d.data.length/4;rgbs.push([Math.round(rr/n),Math.round(gg/n),Math.round(bb/n)]);
+  }
+  rawData[SCAN_SEQ[scanIdx].f]=rgbs;
+  if(navigator.vibrate)navigator.vibrate(80);
+  const mg=document.getElementById('mgrid');mg.style.display='grid';
+  mg.innerHTML=rgbs.map(([r,g,b],i)=>'<div class="mcell" style="background:rgb('+r+','+g+','+b+')">'+(i===4?'⭐':'')+'</div>').join('');
+  scanIdx++;
+  if(scanIdx>=SCAN_SEQ.length){
+    document.getElementById('title').textContent='✅ 6面拍攝完成！';
+    document.getElementById('sub').textContent='按下方按鈕分析顏色';
+    document.getElementById('info').textContent='';
+    document.getElementById('btnRow').innerHTML='<button class="btn" onclick="doClassify()">🔍 分析顏色</button>';
+  }else{
+    const next=SCAN_SEQ[scanIdx];
+    document.getElementById('title').textContent='下一面：'+next.name;
+    document.getElementById('sub').textContent=next.guide;
+    document.getElementById('dots').innerHTML=SCAN_SEQ.map((_,i)=>'<div class="td'+(i<scanIdx?' done':'')+(i===scanIdx?' now':'')+'"></div>').join('');
+    document.getElementById('info').textContent='✅ 已拍 '+scanIdx+'/6，轉好後按拍照';
+    document.getElementById('btnRow').innerHTML='<button class="btn" onclick="doScanCapture()">📸 拍照</button>';
+  }
+}
+// ===== COLOR CLASSIFY =====
+function showError(msg){document.getElementById('info').innerHTML='<span style="color:#E94560">'+msg+'</span>';document.getElementById('btnRow').innerHTML='<button class="btn" onclick="location.reload()">重新開始</button>';}
+function showFacePreviews(id){
+  const el=document.getElementById(id);if(!el)return;
+  el.style.display='flex';el.style.gap='4px';el.style.justifyContent='center';el.style.flexWrap='wrap';el.style.width='auto';el.style.gridTemplateColumns='';
+  el.innerHTML=['U','R','F','D','L','B'].map(f=>{const c=faceColors[f]||[];return '<div style="text-align:center"><div style="font-size:8px;color:rgba(255,255,255,.4)">'+FLABEL[f]+'</div><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1px;width:36px">'+c.map(x=>'<div style="width:10px;height:10px;border-radius:2px;background:'+(CMAP[x]||'#333')+'"></div>').join('')+'</div></div>';}).join('');
+}
+function showEditableFaces(){
+  const mg=document.getElementById('mgrid');mg.style.display='flex';mg.style.gap='6px';mg.style.justifyContent='center';mg.style.flexWrap='wrap';mg.style.width='auto';mg.style.gridTemplateColumns='';
+  let html='';['U','R','F','D','L','B'].forEach(f=>{
+    html+='<div style="text-align:center"><div style="font-size:9px;color:rgba(255,255,255,.5);margin-bottom:2px">'+FLABEL[f]+'</div><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:2px">';
+    faceColors[f].forEach((c,i)=>{
+      if(i===4)html+='<div style="width:22px;height:22px;border-radius:3px;background:'+(CMAP[c]||'#333')+';border:2px solid rgba(255,255,255,.3)"></div>';
+      else html+='<div style="width:22px;height:22px;border-radius:3px;background:'+(CMAP[c]||'#333')+';cursor:pointer;border:1px solid rgba(255,255,255,.15)" onclick="cycleColor(\''+f+'\','+i+')"></div>';
+    });html+='</div></div>';});mg.innerHTML=html;
+}
+function cycleColor(face,pos){const colors=['W','R','B','O','G','Y'];const cur=faceColors[face][pos];faceColors[face][pos]=colors[(colors.indexOf(cur)+1)%6];showEditableFaces();}
+function doManualSolve(){
+  // Validate: each color must appear exactly 9 times
+  const cnt={};['U','R','F','D','L','B'].forEach(f=>faceColors[f].forEach(c=>{cnt[c]=(cnt[c]||0)+1;}));
+  const ok=Object.values(cnt).every(v=>v===9)&&Object.keys(cnt).length===6;
+  if(!ok){showError('每個顏色必須剛好 9 個！目前: '+Object.entries(cnt).map(([c,n])=>CN[c]+':'+n).join(' '));return;}
+  doLBLSolve();
+}
+
+function doClassify(){try{doClassifyInner();}catch(e){showError('分析錯誤: '+e.message);}}
+function doClassifyInner(){
+  const FO=['U','R','F','D','L','B'];const all=[];
+  FO.forEach(f=>{const r=rawData[f];if(!r)return;for(let i=0;i<9;i++)all.push({face:f,pos:i,rgb:r[i],color:null});});
+  if(all.length!==54){showError('只有'+all.length+'個色塊');return;}
+  const anchors={};FO.forEach(f=>{anchors[CC[f]]=rawData[f][4];});
+  all.forEach(s=>{if(s.pos===4)s.color=CC[s.face];});
+  function toHSV(r,g,b){const rf=r/255,gf=g/255,bf=b/255,mx=Math.max(rf,gf,bf),mn=Math.min(rf,gf,bf),d=mx-mn;const v=mx,s=mx>0?d/mx:0;let h=0;if(d>0.001){if(mx===rf)h=60*(((gf-bf)/d)%6);else if(mx===gf)h=60*((bf-rf)/d+2);else h=60*((rf-gf)/d+4);if(h<0)h+=360;}return[h,s,v];}
+  function smartDist(r,g,b,ar,ag,ab,c){const[h,s,v]=toHSV(r,g,b);const[ah,as,av]=toHSV(ar,ag,ab);if(c==='W')return s*5+Math.abs(v-av)*2;if(s<0.15)return 10;let hd=Math.abs(h-ah);hd=Math.min(hd,360-hd);const inRO=(h>300||h<40)&&(ah>300||ah<40);if(inRO){return Math.abs(r-ar)/255*100+Math.abs(v-av)*50+hd*0.5;}return hd+Math.abs(v-av)*30;}
+  const nonC=all.filter(s=>s.pos!==4);
+  nonC.forEach(s=>{s.dists={};Object.entries(anchors).forEach(([c,[ar,ag,ab]])=>{const[r,g,b]=s.rgb;s.dists[c]=smartDist(r,g,b,ar,ag,ab,c);});});
+  const cnt={W:1,R:1,B:1,O:1,G:1,Y:1};const cands=[];
+  nonC.forEach(s=>{Object.entries(s.dists).forEach(([c,d])=>{cands.push({s,c,d});});});
+  cands.sort((a,b)=>a.d-b.d);
+  cands.forEach(({s,c})=>{if(s.color||cnt[c]>=9)return;s.color=c;cnt[c]++;});
+  nonC.filter(s=>!s.color).forEach(s=>{const a=Object.entries(cnt).find(([c,n])=>n<9);if(a){s.color=a[0];cnt[a[0]]++;}});
+  nonC.forEach(s=>{const sorted=Object.entries(s.dists).sort((a,b)=>a[1]-b[1]);s.bestDist=sorted[0][1];s.secondColor=sorted[1][0];s.secondDist=sorted[1][1];s.ambiguity=s.secondDist>0?(s.secondDist-s.bestDist)/s.secondDist:1;});
+  FO.forEach(f=>{faceColors[f]=all.filter(s=>s.face===f).sort((a,b)=>a.pos-b.pos).map(s=>s.color);});
+  // Edge constraint validation
+  const invalidPairs=[['R','O'],['W','Y'],['B','G']];
+  function isInvalidEdge(c1,c2){return invalidPairs.some(([a,b])=>(c1===a&&c2===b)||(c1===b&&c2===a))||c1===c2;}
+  const edgeConstraints=[['F',5,'R',3],['R',5,'B',3],['B',5,'L',3],['L',5,'F',3],['F',2,'R',0],['R',2,'B',0],['B',2,'L',0],['L',2,'F',0],['F',8,'R',6],['R',8,'B',6],['B',8,'L',6],['L',8,'F',6],['U',6,'F',0],['U',7,'F',1],['U',8,'F',2],['U',8,'R',0],['U',5,'R',1],['U',2,'R',2],['U',2,'B',0],['U',1,'B',1],['U',0,'B',2],['U',0,'L',0],['U',3,'L',1],['U',6,'L',2],['D',0,'F',6],['D',1,'F',7],['D',2,'F',8],['D',2,'R',6],['D',5,'R',7],['D',8,'R',8],['D',8,'B',6],['D',7,'B',7],['D',6,'B',8],['D',0,'L',8],['D',3,'L',7],['D',6,'L',6]];
+  for(let pass=0;pass<3;pass++){for(const[f1,p1,f2,p2]of edgeConstraints){const c1=faceColors[f1][p1],c2=faceColors[f2][p2];if(isInvalidEdge(c1,c2)){const s1=nonC.find(s=>s.face===f1&&s.pos===p1),s2=nonC.find(s=>s.face===f2&&s.pos===p2);if(!s1||!s2)continue;if(s1.ambiguity<s2.ambiguity){s1.color=s1.secondColor;faceColors[f1][p1]=s1.secondColor;}else{s2.color=s2.secondColor;faceColors[f2][p2]=s2.secondColor;}}}}
+  // Validate count
+  let fl='';FO.forEach(f=>{faceColors[f].forEach(x=>fl+=C2F[x]||'?');});
+  const fcnt={};for(const ch of fl)fcnt[ch]=(fcnt[ch]||0)+1;
+  const ok2=!fl.includes('?')&&Object.values(fcnt).every(v=>v===9);
+  if(!ok2){
+    document.getElementById('info').innerHTML='<span style="color:#FFA500">顏色辨識可能有誤，請確認或手動修正</span>';
+    showEditableFaces();
+    document.getElementById('btnRow').innerHTML='<button class="btn" onclick="doManualSolve()">✅ 確認後解題</button>';
+    return;
+  }
+  // Success
+  if(vid&&vid.srcObject){vid.srcObject.getTracks().forEach(t=>t.stop());vid.srcObject=null;}
+  if(vid)vid.style.display='none';
+  document.querySelector('.wrap').style.background='#000';
+  if(ov)ov.style.display='none';
+  document.getElementById('info').innerHTML='✅ 辨識成功！';
+  showFacePreviews('mgrid');
+  document.getElementById('btnRow').innerHTML='<button class="btn" onclick="doLBLSolve()">🧩 LBL 解題！</button><button class="btn btn-sm" style="margin-top:6px;background:rgba(255,255,255,.12);color:#ccc" onclick="showEditMode()">✏️ 手動修正</button>';
+}
+function showEditMode(){
+  showEditableFaces();
+  document.getElementById('btnRow').innerHTML='<button class="btn" onclick="doManualSolve()">✅ 確認後解題</button>';
+}
+window._lbl={};
+window.CN={W:"白",B:"藍",R:"紅",Y:"黃",G:"綠",O:"橘"};
+_lbl.solved=function(){return{U:['W','W','W','W','W','W','W','W','W'],R:['B','B','B','B','B','B','B','B','B'],F:['R','R','R','R','R','R','R','R','R'],D:['Y','Y','Y','Y','Y','Y','Y','Y','Y'],L:['G','G','G','G','G','G','G','G','G'],B:['O','O','O','O','O','O','O','O','O']};};
+_lbl.clone=function(s){var c={};['U','R','F','D','L','B'].forEach(function(f){c[f]=s[f].slice();});return c;};
+_lbl.rCW=function(s,f){var a=s[f];s[f]=[a[6],a[3],a[0],a[7],a[4],a[1],a[8],a[5],a[2]];};
+_lbl.cyc=function(s,f){var t;switch(f){
+case'U':t=[s.F[0],s.F[1],s.F[2]];s.F[0]=s.R[0];s.F[1]=s.R[1];s.F[2]=s.R[2];s.R[0]=s.B[0];s.R[1]=s.B[1];s.R[2]=s.B[2];s.B[0]=s.L[0];s.B[1]=s.L[1];s.B[2]=s.L[2];s.L[0]=t[0];s.L[1]=t[1];s.L[2]=t[2];break;
+case'D':t=[s.F[6],s.F[7],s.F[8]];s.F[6]=s.L[6];s.F[7]=s.L[7];s.F[8]=s.L[8];s.L[6]=s.B[6];s.L[7]=s.B[7];s.L[8]=s.B[8];s.B[6]=s.R[6];s.B[7]=s.R[7];s.B[8]=s.R[8];s.R[6]=t[0];s.R[7]=t[1];s.R[8]=t[2];break;
+case'R':t=[s.F[2],s.F[5],s.F[8]];s.F[2]=s.D[2];s.F[5]=s.D[5];s.F[8]=s.D[8];s.D[2]=s.B[6];s.D[5]=s.B[3];s.D[8]=s.B[0];s.B[0]=s.U[8];s.B[3]=s.U[5];s.B[6]=s.U[2];s.U[2]=t[0];s.U[5]=t[1];s.U[8]=t[2];break;
+case'L':t=[s.F[0],s.F[3],s.F[6]];s.F[0]=s.U[0];s.F[3]=s.U[3];s.F[6]=s.U[6];s.U[0]=s.B[8];s.U[3]=s.B[5];s.U[6]=s.B[2];s.B[2]=s.D[6];s.B[5]=s.D[3];s.B[8]=s.D[0];s.D[0]=t[0];s.D[3]=t[1];s.D[6]=t[2];break;
+case'F':t=[s.U[6],s.U[7],s.U[8]];s.U[6]=s.L[8];s.U[7]=s.L[5];s.U[8]=s.L[2];s.L[2]=s.D[0];s.L[5]=s.D[1];s.L[8]=s.D[2];s.D[0]=s.R[6];s.D[1]=s.R[3];s.D[2]=s.R[0];s.R[0]=t[0];s.R[3]=t[1];s.R[6]=t[2];break;
+case'B':t=[s.U[0],s.U[1],s.U[2]];s.U[0]=s.R[2];s.U[1]=s.R[5];s.U[2]=s.R[8];s.R[2]=s.D[8];s.R[5]=s.D[7];s.R[8]=s.D[6];s.D[6]=s.L[0];s.D[7]=s.L[3];s.D[8]=s.L[6];s.L[0]=t[2];s.L[3]=t[1];s.L[6]=t[0];break;}};
+_lbl.dm=function(s,mv){var f=mv[0],p=mv.indexOf("'")>-1,d=mv.indexOf('2')>-1,n=d?2:(p?3:1);for(var i=0;i<n;i++){_lbl.rCW(s,f);_lbl.cyc(s,f);}};
+_lbl.dms=function(s,arr){arr.forEach(function(m){_lbl.dm(s,m);});};
+_lbl.EDGES=[{"f1":"U","p1":7,"f2":"F","p2":1,"layer":"U","slot":"UF"},{"f1":"U","p1":5,"f2":"R","p2":1,"layer":"U","slot":"UR"},{"f1":"U","p1":1,"f2":"B","p2":1,"layer":"U","slot":"UB"},{"f1":"U","p1":3,"f2":"L","p2":1,"layer":"U","slot":"UL"},{"f1":"F","p1":5,"f2":"R","p2":3,"layer":"E","slot":"FR"},{"f1":"F","p1":3,"f2":"L","p2":5,"layer":"E","slot":"FL"},{"f1":"B","p1":3,"f2":"R","p2":5,"layer":"E","slot":"BR"},{"f1":"B","p1":5,"f2":"L","p2":3,"layer":"E","slot":"BL"},{"f1":"D","p1":1,"f2":"F","p2":7,"layer":"D","slot":"DF"},{"f1":"D","p1":5,"f2":"R","p2":7,"layer":"D","slot":"DR"},{"f1":"D","p1":7,"f2":"B","p2":7,"layer":"D","slot":"DB"},{"f1":"D","p1":3,"f2":"L","p2":7,"layer":"D","slot":"DL"}];
+_lbl.CORNERS=[{"f1":"U","p1":8,"f2":"F","p2":2,"f3":"R","p3":0,"layer":"U","slot":"UFR"},{"f1":"U","p1":6,"f2":"F","p2":0,"f3":"L","p3":2,"layer":"U","slot":"UFL"},{"f1":"U","p1":0,"f2":"B","p2":2,"f3":"L","p3":0,"layer":"U","slot":"UBL"},{"f1":"U","p1":2,"f2":"B","p2":0,"f3":"R","p3":2,"layer":"U","slot":"UBR"},{"f1":"D","p1":2,"f2":"F","p2":8,"f3":"R","p3":6,"layer":"D","slot":"DFR"},{"f1":"D","p1":0,"f2":"F","p2":6,"f3":"L","p3":8,"layer":"D","slot":"DFL"},{"f1":"D","p1":6,"f2":"B","p2":8,"f3":"L","p3":6,"layer":"D","slot":"DBL"},{"f1":"D","p1":8,"f2":"B","p2":6,"f3":"R","p3":8,"layer":"D","slot":"DBR"}];
+_lbl.findEdge=function(s,ca,cb){
+  for(var i=0;i<_lbl.EDGES.length;i++){
+    var e=_lbl.EDGES[i], a=s[e.f1][e.p1], b=s[e.f2][e.p2];
+    if((a===ca&&b===cb)||(a===cb&&b===ca)) return{slot:e.slot,layer:e.layer,f1:e.f1,p1:e.p1,c1:a,f2:e.f2,p2:e.p2,c2:b};
+  }
+  return null;
+};
+_lbl.findCorner=function(s,ca,cb,cc){
+  var tgt=[ca,cb,cc].sort().join('');
+  for(var i=0;i<_lbl.CORNERS.length;i++){
+    var c=_lbl.CORNERS[i], a=s[c.f1][c.p1], b=s[c.f2][c.p2], d=s[c.f3][c.p3];
+    if([a,b,d].sort().join('')===tgt) return{slot:c.slot,layer:c.layer,f1:c.f1,p1:c.p1,c1:a,f2:c.f2,p2:c.p2,c2:b,f3:c.f3,p3:c.p3,c3:d};
+  }
+  return null;
+};
+_lbl.genSeqs=function(maxLen){
+  var base=['U',"U'","U2",'D',"D'",'D2','R',"R'",'R2','L',"L'",'L2','F',"F'",'F2','B',"B'",'B2'];
+  var result=[[]];
+  for(var len=1;len<=maxLen;len++){
+    var prev=result.filter(function(s){return s.length===len-1;});
+    for(var pi=0;pi<prev.length;pi++){
+      for(var mi=0;mi<base.length;mi++){
+        var m=base[mi], seq=prev[pi];
+        if(seq.length>0&&seq[seq.length-1][0]===m[0]) continue;
+        if(seq.length>1&&seq[seq.length-2][0]===m[0]) continue;
+        result.push(seq.concat([m]));
+      }
+    }
+  }
+  return result;
+};
+_lbl.trySeqs=function(s,seqs,check,preserve){
+  for(var i=0;i<seqs.length;i++){
+    var test=_lbl.clone(s);
+    _lbl.dms(test,seqs[i]);
+    if(check(test)&&(!preserve||preserve(test))) return seqs[i];
+  }
+  return null;
+};
+_lbl.crossEdgeOK=function(st,u,f,c){return st.U[u]==='W'&&st[f][1]===c;};
+_lbl.crossOK=function(st){return _lbl.crossEdgeOK(st,7,'F','R')&&_lbl.crossEdgeOK(st,5,'R','B')&&_lbl.crossEdgeOK(st,1,'B','O')&&_lbl.crossEdgeOK(st,3,'L','G');};
+_lbl.CORNER_TARGETS=[{"slot":"UFR","uPos":8,"f1":"F","p1":2,"f2":"R","p2":0,"colors":["W","R","B"],"dBelow":"DFR","insert":["R'","D'","R","D"],"kickout":["R'","D'","R","D"],"n":"白紅藍"},{"slot":"UFL","uPos":6,"f1":"F","p1":0,"f2":"L","p2":2,"colors":["W","R","G"],"dBelow":"DFL","insert":["L","D","L'","D'"],"kickout":["L","D","L'","D'"],"n":"白紅綠"},{"slot":"UBL","uPos":0,"f1":"B","p1":2,"f2":"L","p2":0,"colors":["W","O","G"],"dBelow":"DBL","insert":["L'","D'","L","D"],"kickout":["L'","D'","L","D"],"n":"白橘綠"},{"slot":"UBR","uPos":2,"f1":"B","p1":0,"f2":"R","p2":2,"colors":["W","O","B"],"dBelow":"DBR","insert":["R","D","R'","D'"],"kickout":["R","D","R'","D'"],"n":"白橘藍"}];
+_lbl.D_CORNER_ORDER=["DFR","DBR","DBL","DFL"];
+_lbl.dMovesToSlot=function(from, to) {
+  var order = _lbl.D_CORNER_ORDER;
+  var fi = order.indexOf(from), ti = order.indexOf(to);
+  if(fi<0||ti<0) return [];
+  var diff = (ti - fi + 4) % 4;
+  if(diff===0) return [];
+  if(diff===1) return ["D"];
+  if(diff===2) return ["D2"];
+  return ["D'"];
+};
+_lbl.engine=function(init) {
+  var s = _lbl.clone(init), script = [], mc = 0;
+  
+  function recOnly(stage, explain, mvArr) {
+    if (!mvArr || mvArr.length === 0) return;
+    script.push({stage:stage, explain:explain, moves:mvArr});
+    mc += mvArr.length;
+  }
+  function rec(stage, explain, mvArr) {
+    if (!mvArr || mvArr.length === 0) return;
+    var opt = optimizeMoves(mvArr);
+    if (opt.length === 0) return;
+    script.push({stage:stage, explain:explain, moves:opt});
+    _lbl.dms(s, opt); mc += opt.length;
+  }
+
+  // S1: Rule-based (internally modifies state)
+  var r1 = _lbl.solveStage1(s);
+  if (r1) { for (var si1=0; si1<r1.steps.length; si1++) recOnly('S1', r1.steps[si1].explain, r1.steps[si1].moves); }
+
+  // S2 (rec — doesn't self-modify)
+  var CT=_lbl.CORNER_TARGETS;for(var ci2=0;ci2<CT.length;ci2++){var tgt=CT[ci2];for(var att=0;att<8;att++){if(s.U[tgt.uPos]==='W'&&s[tgt.f1][tgt.p1]===s[tgt.f1][4]&&s[tgt.f2][tgt.p2]===s[tgt.f2][4])break;var corner=_lbl.findCorner(s,tgt.colors[0],tgt.colors[1],tgt.colors[2]);if(!corner)break;if(corner.layer==='U'){var ks=CT.filter(function(x){return x.slot===corner.slot;})[0];if(ks)rec('S2','角塊：【'+tgt.n+'】踢到底層',ks.kickout);continue;}if(corner.layer==='D'){var sd=_lbl.dMovesToSlot(corner.slot,tgt.dBelow);if(sd.length>0)rec('S2','角塊：旋轉→【'+tgt.n+'】到正下方',sd);var ins=[],cnt=0;for(var r2=0;r2<6;r2++){ins=ins.concat(tgt.insert);cnt++;var t2=_lbl.clone(s);_lbl.dms(t2,ins);if(t2.U[tgt.uPos]==='W'&&t2[tgt.f1][tgt.p1]===t2[tgt.f1][4]&&t2[tgt.f2][tgt.p2]===t2[tgt.f2][4])break;}rec('S2','角塊：'+cnt+'次裝入【'+tgt.n+'】',ins);}}}
+
+  // S3
+  var MID=_lbl.MID;for(var mi=0;mi<MID.length;mi++){var mt=MID[mi];for(var att3=0;att3<8;att3++){if(_lbl.edgeOK(s,mt))break;var edge2=_lbl.findEdge(s,mt.c1,mt.c2);if(!edge2)break;if(edge2.layer==='E'){var kf=_lbl.F2L_FORMULAS[edge2.slot];if(kf)rec('S3','邊塊：【'+mt.n+'】從'+edge2.slot+'踢出',kf.right);continue;}if(edge2.layer==='D'){var cs=[];for(var k=0;k<MID.length;k++){if(k!==mi&&_lbl.edgeOK(s,MID[k]))cs.push(MID[k]);}var sol=_lbl.findF2LInsert(s,mt,cs);if(sol){if(sol.setup.length>0)rec('S3','邊塊：對齊【'+mt.n+'】',sol.setup);rec('S3','邊塊：'+sol.dir+'插入【'+mt.n+'】',sol.formula);}else break;}}}
+
+  // S4 (internally modifies)
+  var r4=_lbl.solveStage4(s);if(r4){for(var si4=0;si4<r4.steps.length;si4++)recOnly('S4',r4.steps[si4].explain,r4.steps[si4].moves);}
+
+  // S5 (does NOT modify → apply manually)
+  var r5=_lbl.solveStage5(s);if(r5&&r5.moves.length>0){_lbl.dms(s,r5.moves);for(var si5=0;si5<r5.steps.length;si5++)recOnly('S5','邊塊歸位：'+r5.steps[si5].explain,r5.steps[si5].moves);}
+
+  // S6 (internally modifies)
+  var r6=_lbl.solveStage6(s);if(r6){for(var si6=0;si6<r6.steps.length;si6++)recOnly('S6','角塊歸位：'+r6.steps[si6].explain,r6.steps[si6].moves);}
+
+  // S7 (internally modifies)
+  var r7=_lbl.solveStage7(s);if(r7){for(var si7=0;si7<r7.steps.length;si7++){if(r7.steps[si7].moves.length>0)recOnly('S7','角塊翻轉：'+r7.steps[si7].explain,r7.steps[si7].moves);}}
+
+  return {script:script, mc:mc, state:s};
+};
+_lbl.MID_TARGETS=[{"f1":"F","p1":5,"f2":"R","p2":3,"c1":"R","c2":"B","n":"紅藍","rightAlign":"DF","rightFormula":["D","R","D'","R'","D'","F'","D","F"],"leftAlign":"DR","leftFormula":["D'","F'","D","F","D","R","D'","R'"]},{"f1":"F","p1":3,"f2":"L","p2":5,"c1":"R","c2":"G","n":"紅綠","rightAlign":"DL","rightFormula":["D'","L'","D","L","D","F","D'","F'"],"leftAlign":"DF","leftFormula":["D","F","D'","F'","D'","L'","D","L"]},{"f1":"B","p1":3,"f2":"R","p2":5,"c1":"O","c2":"B","n":"橘藍","rightAlign":"DR","rightFormula":["D","R'","D'","R","D","B","D'","B'"],"leftAlign":"DB","leftFormula":["D'","B","D","B'","D'","R'","D","R"]},{"f1":"B","p1":5,"f2":"L","p2":3,"c1":"O","c2":"G","n":"橘綠","rightAlign":"DB","rightFormula":["D'","L","D","L'","D'","B'","D","B"],"leftAlign":"DL","leftFormula":["D","B'","D'","B","D","L","D'","L'"]}];
+_lbl.D_EDGE_ORDER=["DF","DR","DB","DL"];
+_lbl.dEdgeMovesToSlot=function(from, to) {
+  var order = _lbl.D_EDGE_ORDER;
+  var fi = order.indexOf(from), ti = order.indexOf(to);
+  if(fi<0||ti<0) return [];
+  var diff = (ti - fi + 4) % 4;
+  if(diff===0) return [];
+  if(diff===1) return ["D"];
+  if(diff===2) return ["D2"];
+  return ["D'"];
+};
+_lbl.MID=[{"f1":"F","p1":5,"c1":"R","f2":"R","p2":3,"c2":"B","n":"紅藍","alignR":"DF","formulaR":["D'","R'","D","R","D","F","D'","F'"],"alignL":"DR","formulaL":["D","F","D'","F'","D'","R'","D","R"],"kickout":["D'","R'","D","R","D","F","D'","F'"],"rightSideC":"R","leftSideC":"B"},{"f1":"F","p1":3,"c1":"R","f2":"L","p2":5,"c2":"G","n":"紅綠","alignR":"DF","formulaR":["D","L","D'","L'","D'","F'","D","F"],"alignL":"DL","formulaL":["D'","F'","D","F","D","L","D'","L'"],"kickout":["D","L","D'","L'","D'","F'","D","F"],"rightSideC":"R","leftSideC":"G"},{"f1":"B","p1":3,"c1":"O","f2":"R","p2":5,"c2":"B","n":"橘藍","alignR":"DR","formulaR":["D'","B'","D","B","D","R","D'","R'"],"alignL":"DB","formulaL":["D","R","D'","R'","D'","B'","D","B"],"kickout":["D'","B'","D","B","D","R","D'","R'"],"rightSideC":"B","leftSideC":"O"},{"f1":"B","p1":5,"c1":"O","f2":"L","p2":3,"c2":"G","n":"橘綠","alignR":"DB","formulaR":["D'","L'","D","L","D","B","D'","B'"],"alignL":"DL","formulaL":["D","B","D'","B'","D'","L'","D","L"],"kickout":["D'","L'","D","L","D","B","D'","B'"],"rightSideC":"O","leftSideC":"G"}];
+_lbl.F2L_FORMULAS={"FR":{"right":["D'","R'","D","R","D","F","D'","F'"],"left":["D","F","D'","F'","D'","R'","D","R"]},"FL":{"right":["D","L","D'","L'","D'","F'","D","F"],"left":["D'","F'","D","F","D","L","D'","L'"]},"BR":{"right":["D'","B'","D","B","D","R","D'","R'"],"left":["D","R","D'","R'","D'","B'","D","B"]},"BL":{"right":["D'","L'","D","L","D","B","D'","B'"],"left":["D","B","D'","B'","D'","L'","D","L"]}};
+_lbl.D_SETUPS=[[],["D"],["D2"],["D'"]];
+_lbl.f1OK=function(st) {
+  if (!st.U.every(function(c){return c==='W';})) return false;
+  for (var i = 0; i < 4; i++) {
+    var f = ['F','R','B','L'][i];
+    if (st[f][0]!==st[f][4] || st[f][1]!==st[f][4] || st[f][2]!==st[f][4]) return false;
+  }
+  return true;
+};
+_lbl.edgeOK=function(st, mt) {
+  return st[mt.f1][mt.p1]===mt.c1 && st[mt.f2][mt.p2]===mt.c2;
+};
+_lbl.findF2LInsert=function(state, mt, solvedMids) {
+  var targetSlots = [mt.n === '紅藍' ? 'FR' : mt.n === '紅綠' ? 'FL' : mt.n === '橘藍' ? 'BR' : 'BL'];
+  // 嘗試目標 slot 的公式（最常見）+ 所有其他 slot 的公式（以防萬一）
+  var allSlots = ['FR','FL','BR','BL'];
+  
+  for (var di = 0; di < _lbl.D_SETUPS.length; di++) {
+    var dSetup = _lbl.D_SETUPS[di];
+    
+    for (var si = 0; si < allSlots.length; si++) {
+      var slot = allSlots[si];
+      var formulas = _lbl.F2L_FORMULAS[slot];
+      
+      for (var dir = 0; dir < 2; dir++) {
+        var formula = dir === 0 ? formulas.right : formulas.left;
+        var test = _lbl.clone(state);
+        _lbl.dms(test, dSetup);
+        _lbl.dms(test, formula);
+        
+        // 檢查：目標邊塊歸位 + F1 完整 + 已解邊塊沒壞
+        if (_lbl.edgeOK(test, mt) && _lbl.f1OK(test)) {
+          var f2intact = true;
+          for (var k = 0; k < solvedMids.length; k++) {
+            if (!_lbl.edgeOK(test, solvedMids[k])) { f2intact = false; break; }
+          }
+          if (f2intact) {
+            return {setup: dSetup, formula: formula, dir: dir===0?'右':'左', slot: slot};
+          }
+        }
+      }
+    }
+  }
+  return null;
+};
+_lbl.S4F=["B","R","D","R'","D'","B'"];
+_lbl.S5F=["R","D","R'","D","R","D2","R'","D"];
+_lbl.S6F_candidates=[["D","R","D'","L'","D","R'","D'","L"],["D'","R'","D","L","D'","R","D","L'"]];
+_lbl.S7F=["R'","D'","R","D"];
+_lbl.SUNE=["R","D","R'","D","R","D2","R'"];
+_lbl.checkEdgeAlign=function(st) {
+  var faces = ['F','R','B','L'];
+  var dSetups = [[], ['D'], ['D2'], ["D'"]];
+  var best = {count:0, dSetup:[], aligned:[], type:'none'};
+  
+  for (var di = 0; di < 4; di++) {
+    var t = _lbl.clone(st);
+    _lbl.dms(t, dSetups[di]);
+    var aligned = [];
+    for (var fi = 0; fi < 4; fi++) {
+      if (t[faces[fi]][7] === t[faces[fi]][4]) aligned.push(faces[fi]);
+    }
+    if (aligned.length > best.count) {
+      best.count = aligned.length;
+      best.dSetup = dSetups[di];
+      best.aligned = aligned;
+    }
+  }
+  
+  // 判斷 type
+  if (best.count === 4) best.type = 'all';
+  else if (best.count === 2) {
+    // 判斷是相鄰還是相對
+    var a = best.aligned;
+    var idx0 = faces.indexOf(a[0]), idx1 = faces.indexOf(a[1]);
+    var diff = Math.abs(idx0 - idx1);
+    best.type = (diff === 2) ? 'opposite' : 'adjacent';
+  } else {
+    best.type = 'none'; // 0 或 1 個（理論上不應出現）
+  }
+  return best;
+};
+_lbl.alignToBR=function(st, alignedFaces) {
+  // B 和 R 是相鄰面。我們需要找 D-rotation 使對齊邊到 B 和 R
+  var faces = ['F','R','B','L'];
+  var dSetups = [[], ['D'], ['D2'], ["D'"]];
+  
+  for (var di = 0; di < 4; di++) {
+    var t = _lbl.clone(st);
+    _lbl.dms(t, dSetups[di]);
+    // 檢查 B 和 R 是否都對齊
+    if (t.B[7] === t.B[4] && t.R[7] === t.R[4]) {
+      return dSetups[di];
+    }
+  }
+  return []; // fallback
+};
+_lbl.solveStage5=function(state) {
+  var SUNE = ["R","D","R'","D","R","D2","R'"];
+  var dOpts = [[], ['D'], ['D2'], ["D'"]];
+  
+  // Check just D-rotation (already solved)
+  for (var d0 = 0; d0 < 4; d0++) {
+    var t0 = _lbl.clone(state);
+    _lbl.dms(t0, dOpts[d0]);
+    if (_lbl.deOK(t0) === 4) {
+      return {moves: dOpts[d0], steps: [{explain:'旋轉底層→邊塊全對齊！', moves:dOpts[d0]}]};
+    }
+  }
+  
+  // Try depth 1: D1 + Sune + D2
+  for (var d1 = 0; d1 < 4; d1++) {
+    for (var d2 = 0; d2 < 4; d2++) {
+      var t1 = _lbl.clone(state);
+      _lbl.dms(t1, dOpts[d1]); _lbl.dms(t1, SUNE); _lbl.dms(t1, dOpts[d2]);
+      if (_lbl.deOK(t1) === 4) {
+        var steps = [];
+        if (dOpts[d1].length) steps.push({explain:'旋轉底層，把對齊的邊塊放到右後方', moves:dOpts[d1]});
+        steps.push({explain:'做一次小魚公式', moves:SUNE});
+        if (dOpts[d2].length) steps.push({explain:'最後旋轉底層→四邊對齊！', moves:dOpts[d2]});
+        return {moves: dOpts[d1].concat(SUNE).concat(dOpts[d2]), steps: steps};
+      }
+    }
+  }
+  
+  // Try depth 2: D1 + Sune + D2 + Sune + D3
+  for (var d1b = 0; d1b < 4; d1b++) {
+    for (var d2b = 0; d2b < 4; d2b++) {
+      for (var d3 = 0; d3 < 4; d3++) {
+        var t2 = _lbl.clone(state);
+        _lbl.dms(t2, dOpts[d1b]); _lbl.dms(t2, SUNE);
+        _lbl.dms(t2, dOpts[d2b]); _lbl.dms(t2, SUNE);
+        _lbl.dms(t2, dOpts[d3]);
+        if (_lbl.deOK(t2) === 4) {
+          var steps2 = [];
+          if (dOpts[d1b].length) steps2.push({explain:'旋轉底層準備', moves:dOpts[d1b]});
+          steps2.push({explain:'第一次小魚公式', moves:SUNE});
+          if (dOpts[d2b].length) steps2.push({explain:'旋轉底層調整', moves:dOpts[d2b]});
+          steps2.push({explain:'第二次小魚公式', moves:SUNE});
+          if (dOpts[d3].length) steps2.push({explain:'最後旋轉→四邊全對齊！', moves:dOpts[d3]});
+          return {moves: dOpts[d1b].concat(SUNE).concat(dOpts[d2b]).concat(SUNE).concat(dOpts[d3]), steps: steps2};
+        }
+      }
+    }
+  }
+  
+  return null;
+};
+_lbl.deOK=function(st) {
+  return (st.F[7]===st.F[4]?1:0) + (st.R[7]===st.R[4]?1:0) +
+         (st.B[7]===st.B[4]?1:0) + (st.L[7]===st.L[4]?1:0);
+};
+_lbl.findBestEdgeAlign=function(st) {
+  var faces = ['F','R','B','L'];
+  var dOpts = [[], ['D'], ['D2'], ["D'"]];
+  var best = {moves:[], count:0, aligned:[], type:'none'};
+  
+  for (var di = 0; di < 4; di++) {
+    var t = _lbl.clone(st);
+    _lbl.dms(t, dOpts[di]);
+    var aligned = [];
+    for (var fi = 0; fi < 4; fi++) {
+      if (t[faces[fi]][7] === t[faces[fi]][4]) aligned.push(faces[fi]);
+    }
+    if (aligned.length > best.count) {
+      best = {moves: dOpts[di], count: aligned.length, aligned: aligned};
+    }
+  }
+  
+  // 判斷 type
+  if (best.count === 4) { best.type = 'solved'; }
+  else if (best.count === 2) {
+    var a = best.aligned;
+    var idx0 = faces.indexOf(a[0]), idx1 = faces.indexOf(a[1]);
+    var diff = Math.abs(idx0 - idx1);
+    best.type = (diff === 2) ? 'opposite' : 'adjacent';
+  } else {
+    best.type = 'none';
+  }
+  return best;
+};
+_lbl.moveToBR=function(alignedFaces) {
+  // 目標：把 aligned 的兩個面旋轉到 B 和 R
+  // D-rotation 對 D 層邊塊的效果：D 把 DF→DR→DB→DL
+  // 即 D 把 F 位置的邊塊移到 R 位置
+  // 等價於：面的排列 F→R→B→L 在 D 後面觀看是 F→L (邊塊往前)
+  // 
+  // 簡化：直接用查表
+  var a = alignedFaces.sort().join(',');
+  var map = {
+    'B,R': [],       // 已在 B+R
+    'F,R': ["D'"],   // F→B 需要 D2, R→... 不對，直接試
+    'F,L': ['D2'],   // F→B, L→R
+    'B,L': ['D'],    // B→?, L→?
+  };
+  if (map[a] !== undefined) return map[a];
+  
+  // Fallback: 暴力找
+  var faces = ['F','R','B','L'];
+  var dOpts = [[], ['D'], ['D2'], ["D'"]];
+  // 我們需要找一個 D-rotation，使得 B 和 R 位置的邊塊對齊
+  // 但注意！我們要的不是「B 和 R 對齊」，而是「aligned 的邊移到 B+R」
+  // aligned 的邊已經在正確位置了(執行了 setup D 之後)
+  // 所以我們要的 D-rotation 要讓 aligned 面的邊塊跑到 B 和 R
+  // 
+  // 但 D-rotation 會改變邊塊位置，打破 aligned 狀態...
+  // 所以實際上我們不能再做 D-rotation！
+  // 
+  // 正確做法：在 findBestEdgeAlign 時，直接找「B 和 R 對齊」的 D-rotation
+  return [];
+};
+_lbl.S6_FORMULAS={"DFR":["D","F","D'","B'","D","F'","D'","B"],"DBR":["D","R","D'","L'","D","R'","D'","L"],"DBL":["D","B","D'","F'","D","B'","D'","F"],"DFL":["D","L","D'","R'","D","L'","D'","R"]};
+_lbl.S6_SLOTS=[{"name":"DFR","d":2,"f1":"F","p1":8,"f2":"R","p2":6,"cc":["Y","R","B"]},{"name":"DFL","d":0,"f1":"F","p1":6,"f2":"L","p2":8,"cc":["Y","R","G"]},{"name":"DBL","d":6,"f1":"B","p1":8,"f2":"L","p2":6,"cc":["Y","O","G"]},{"name":"DBR","d":8,"f1":"B","p1":6,"f2":"R","p2":8,"cc":["Y","O","B"]}];
+_lbl.dcInPlace=function(st) {
+  var count = 0;
+  var which = [];
+  for (var i = 0; i < 4; i++) {
+    var sl = _lbl.S6_SLOTS[i];
+    var colors = [st.D[sl.d], st[sl.f1][sl.p1], st[sl.f2][sl.p2]].sort().join('');
+    if (colors === sl.cc.slice().sort().join('')) {
+      count++;
+      which.push(sl.name);
+    }
+  }
+  return {count: count, which: which};
+};
+_lbl.solveStage6=function(state) {
+  var steps = [];
+  
+  for (var safety = 0; safety < 4; safety++) {
+    var ip = _lbl.dcInPlace(state);
+    
+    if (ip.count === 4) break; // 全部歸位！
+    
+    if (ip.count === 0) {
+      // 沒有 anchor → 隨便執行一條公式，數學保證會出現 1 個正確角塊
+      var f = _lbl.S6_FORMULAS.DFR;
+      steps.push({explain:'沒有角塊在正確位置，先做一次角塊公式', moves:f});
+      _lbl.dms(state, f);
+      continue;
+    }
+    
+    if (ip.count === 1) {
+      // 找到 anchor！
+      var anchor = ip.which[0];
+      var f = _lbl.S6_FORMULAS[anchor];
+      steps.push({explain:'以【'+anchor+'】為錨點，做角塊公式', moves:f});
+      _lbl.dms(state, f);
+      
+      // 檢查是否歸位
+      var ip2 = _lbl.dcInPlace(state);
+      if (ip2.count === 4) break;
+      
+      // 沒歸位 → 方向反了，再做一次
+      steps.push({explain:'方向反了，再做一次角塊公式', moves:f});
+      _lbl.dms(state, f);
+      break;
+    }
+  }
+  
+  var allMoves = [];
+  for (var i = 0; i < steps.length; i++) allMoves = allMoves.concat(steps[i].moves);
+  return {moves: allMoves, steps: steps};
+};
+_lbl.solveStage7=function(state) {
+  var sexy = ["R","U","R'","U'"]; // 改用 R U R' U'！
+  var steps = [];
+  
+  for (var ci = 0; ci < 4; ci++) {
+    if (ci > 0) {
+      steps.push({explain:'轉底層，把下一個角塊帶到工作區', moves:['D']});
+      _lbl.dm(state, 'D');
+    }
+    
+    // 做 sexy move 直到 D[2]=Y (0, 2, 或 4 次)
+    var count = 0;
+    while (state.D[2] !== 'Y' && count < 6) {
+      _lbl.dms(state, sexy);
+      count++;
+    }
+    if (count > 0) {
+      var allSexy = [];
+      for (var k = 0; k < count; k++) allSexy = allSexy.concat(sexy);
+      steps.push({explain:count+'次右手公式翻轉角塊', moves:allSexy});
+    }
+  }
+  
+  // 最後 D 對齊
+  for (var fd = 0; fd < 4; fd++) {
+    if (state.F[7]===state.F[4] && state.R[7]===state.R[4] &&
+        state.B[7]===state.B[4] && state.L[7]===state.L[4]) break;
+    steps.push({explain:'最後底層對齊', moves:['D']});
+    _lbl.dm(state, 'D');
+  }
+  
+  var allMoves = [];
+  for (var i = 0; i < steps.length; i++) allMoves = allMoves.concat(steps[i].moves);
+  return {moves: allMoves, steps: steps};
+};
+_lbl.getTopoState=function(st) {
+  var yPos = [];
+  // D面4邊: D[1]=上(B面方向), D[3]=左(L面), D[5]=右(R面), D[7]=下(F面)
+  if (st.D[1] === 'Y') yPos.push('B'); // D[1] = DB edge
+  if (st.D[3] === 'Y') yPos.push('L'); // D[3] = DL edge
+  if (st.D[5] === 'Y') yPos.push('R'); // D[5] = DR edge
+  if (st.D[7] === 'Y') yPos.push('F'); // D[7] = DF edge
+  
+  var count = yPos.length;
+  if (count === 4) return 4; // cross
+  if (count === 0) return 0; // dot
+  if (count === 2) {
+    // 對向: F+B 或 L+R
+    if ((yPos.indexOf('F')>=0 && yPos.indexOf('B')>=0) ||
+        (yPos.indexOf('L')>=0 && yPos.indexOf('R')>=0)) return 2; // line
+    return 1; // L形
+  }
+  return -1; // 不應出現
+};
+_lbl.solveStage4=function(state) {
+  var oll = ["B","R","D","R'","D'","B'"];
+  var dOpts = [[], ['D'], ['D2'], ["D'"]];
+  var steps = [];
+  
+  for (var loop = 0; loop < 4; loop++) {
+    var current = _lbl.getTopoState(state);
+    if (current === 4) break; // cross 完成！
+    
+    // 目標：dot→L, L→line, line→cross
+    var target = (current === 0) ? 1 : (current === 1) ? 2 : 4;
+    
+    var found = false;
+    for (var di = 0; di < 4; di++) {
+      var t = _lbl.clone(state);
+      _lbl.dms(t, dOpts[di]);
+      _lbl.dms(t, oll);
+      
+      if (_lbl.getTopoState(t) === target) {
+        var moves = dOpts[di].concat(oll);
+        steps.push({explain:'黃色十字('+current+'→'+target+')', moves:moves});
+        _lbl.dms(state, moves);
+        found = true;
+        break;
+      }
+    }
+    
+    if (!found) {
+      // Fallback: 如果找不到精確的下一步，選黃色最多的
+      var bestYe = -1, bestMv = null;
+      for (var di2 = 0; di2 < 4; di2++) {
+        var t2 = _lbl.clone(state);
+        _lbl.dms(t2, dOpts[di2]);
+        _lbl.dms(t2, oll);
+        var ye2 = [t2.D[1],t2.D[3],t2.D[5],t2.D[7]].filter(function(c){return c==='Y';}).length;
+        if (ye2 > bestYe) { bestYe = ye2; bestMv = dOpts[di2].concat(oll); }
+      }
+      steps.push({explain:'黃色十字fallback(→'+bestYe+')', moves:bestMv});
+      _lbl.dms(state, bestMv);
+    }
+  }
+  
+  var allMoves = [];
+  for (var i = 0; i < steps.length; i++) allMoves = allMoves.concat(steps[i].moves);
+  return {moves: allMoves, steps: steps};
+};
+_lbl.solveStage1=function(state) {
+  var seqs4 = _lbl.genSeqs(4);
+  var crossTargets = [
+    {u:7, f:'F', c:'R', n:'前紅'},{u:5, f:'R', c:'B', n:'右藍'},
+    {u:1, f:'B', c:'O', n:'後橘'},{u:3, f:'L', c:'G', n:'左綠'}
+  ];
+  var steps = [];
+  for (var ci = 0; ci < crossTargets.length; ci++) {
+    var ct = crossTargets[ci];
+    for (var safety = 0; safety < 6; safety++) {
+      if (_lbl.crossEdgeOK(state, ct.u, ct.f, ct.c)) break;
+      var edge = _lbl.findEdge(state, 'W', ct.c);
+      if (!edge) break;
+      if (edge.layer === 'U') {
+        var ku = _lbl.U_KICKOUT[edge.slot];
+        if (ku) { steps.push({explain:'踢到底層', moves:ku}); _lbl.dms(state, ku); }
+        continue;
+      }
+      if (edge.layer === 'E') {
+        var ko = _lbl.E_KICKOUT[edge.slot];
+        if (ko) {
+          var bk = null;
+          for (var ki = 0; ki < ko.length; ki++) {
+            var tt = _lbl.clone(state); _lbl.dms(tt, ko[ki]);
+            var ok2 = true;
+            for (var pj = 0; pj < ci; pj++) { var pt = crossTargets[pj]; if (!_lbl.crossEdgeOK(tt, pt.u, pt.f, pt.c)) { ok2=false; break; } }
+            if (ok2) { bk = ko[ki]; break; }
+          }
+          if (!bk) bk = ko[0];
+          steps.push({explain:'中層踢出', moves:bk}); _lbl.dms(state, bk);
+        }
+        continue;
+      }
+      if (edge.layer === 'D') {
+        var ps=[];for(var j=0;j<ci;j++){var p=crossTargets[j];if(_lbl.crossEdgeOK(state,p.u,p.f,p.c))ps.push(p);}
+        var pf=(function(pp){return function(st){for(var k=0;k<pp.length;k++){if(!_lbl.crossEdgeOK(st,pp[k].u,pp[k].f,pp[k].c))return false;}return true;};})(ps);
+        var cf=(function(u,f,c){return function(st){return _lbl.crossEdgeOK(st,u,f,c);};})(ct.u,ct.f,ct.c);
+        var found=_lbl.trySeqs(state,seqs4,cf,pf);
+        if(!found){
+          var dP=[['D'],['D2'],["D'"]];
+          for(var dp=0;dp<3;dp++){var t2=_lbl.clone(state);_lbl.dms(t2,dP[dp]);var fd2=_lbl.trySeqs(t2,seqs4,cf,pf);if(fd2){found=dP[dp].concat(fd2);break;}}
+        }
+        if(found&&found.length>0){steps.push({explain:'【白-'+CN[ct.c]+'】→'+ct.n,moves:found});_lbl.dms(state,optimizeMoves(found));}
+        break;
+      }
+    }
+  }
+  return {steps:steps};
+};
+_lbl.E_KICKOUT={"FR":[["R'","D","R"],["F","D'","F'"]],"FL":[["L","D'","L'"],["F'","D","F"]],"BR":[["R","D'","R'"],["B'","D","B"]],"BL":[["L'","D","L"],["B","D'","B'"]]};
+_lbl.U_KICKOUT={"UF":["F2"],"UR":["R2"],"UB":["B2"],"UL":["L2"]};
+
+function optimizeMoves(mvs){
+  let arr=[...mvs];
+  let changed=true;
+  while(changed){
+    changed=false;
+    for(let i=0;i<arr.length-1;i++){
+      const a=arr[i],b=arr[i+1];
+      if(a[0]!==b[0])continue; // different face
+      const face=a[0];
+      // Convert to quarter turns: X=1, X'=-1, X2=2
+      function toQ(m){if(m.includes('2'))return 2;if(m.includes("'"))return -1;return 1;}
+      function fromQ(f,q){q=((q%4)+4)%4;if(q===0)return null;if(q===1)return f;if(q===2)return f+'2';return f+"'";}
+      const qa=toQ(a),qb=toQ(b);
+      const sum=(qa+qb)%4;
+      const merged=fromQ(face,sum);
+      if(merged===null){
+        arr.splice(i,2); // cancel out
+      }else{
+        arr.splice(i,2,merged); // merge
+      }
+      changed=true;
+      break;
+    }
+  }
+  return arr;
+}
+// ===== CFOP ENGINE v1.0 =====
+// Cross: reuse S1
+// F2L: reuse S2+S3 logic but present as single "F2L" stage  
+// OLL: reuse S4+S5 (2-Look OLL)
+// PLL: reuse S6+S7 (2-Look PLL)
+
+_lbl.cfopEngine = function(init) {
+  var s = _lbl.clone(init), script = [], mc = 0;
+  
+  function recOnly(stage, explain, mvArr) {
+    if (!mvArr || mvArr.length === 0) return;
+    script.push({stage:stage, explain:explain, moves:mvArr});
+    mc += mvArr.length;
+  }
+  function rec(stage, explain, mvArr) {
+    if (!mvArr || mvArr.length === 0) return;
+    var opt = optimizeMoves(mvArr);
+    if (opt.length === 0) return;
+    script.push({stage:stage, explain:explain, moves:opt});
+    _lbl.dms(s, opt); mc += opt.length;
+  }
+
+  // === CROSS (S1, internally modifies) ===
+  var r1 = _lbl.solveStage1(s);
+  if (r1) r1.steps.forEach(function(st){ recOnly('Cross', st.explain, st.moves); });
+
+  // === F2L: corners (S2 logic, rec) ===
+  var CT = _lbl.CORNER_TARGETS;
+  for (var ci = 0; ci < CT.length; ci++) {
+    var tgt = CT[ci];
+    for (var att = 0; att < 8; att++) {
+      if (s.U[tgt.uPos]==='W' && s[tgt.f1][tgt.p1]===s[tgt.f1][4] && s[tgt.f2][tgt.p2]===s[tgt.f2][4]) break;
+      var corner = _lbl.findCorner(s, tgt.colors[0], tgt.colors[1], tgt.colors[2]);
+      if (!corner) break;
+      if (corner.layer === 'U') {
+        var ks = CT.filter(function(x){ return x.slot === corner.slot; })[0];
+        if (ks) rec('F2L', '角塊【'+tgt.n+'】踢到底層', ks.kickout);
+        continue;
+      }
+      if (corner.layer === 'D') {
+        var sd = _lbl.dMovesToSlot(corner.slot, tgt.dBelow);
+        if (sd.length > 0) rec('F2L', '角塊旋轉到正下方', sd);
+        var ins = [], cnt = 0;
+        for (var r2 = 0; r2 < 6; r2++) {
+          ins = ins.concat(tgt.insert); cnt++;
+          var t2 = _lbl.clone(s); _lbl.dms(t2, ins);
+          if (t2.U[tgt.uPos]==='W' && t2[tgt.f1][tgt.p1]===t2[tgt.f1][4] && t2[tgt.f2][tgt.p2]===t2[tgt.f2][4]) break;
+        }
+        rec('F2L', cnt+'次裝入角塊【'+tgt.n+'】', ins);
+      }
+    }
+  }
+  
+  // === F2L: edges (S3 logic, rec) ===
+  var MID = _lbl.MID;
+  for (var mi = 0; mi < MID.length; mi++) {
+    var mt = MID[mi];
+    for (var att3 = 0; att3 < 8; att3++) {
+      if (_lbl.edgeOK(s, mt)) break;
+      var edge2 = _lbl.findEdge(s, mt.c1, mt.c2);
+      if (!edge2) break;
+      if (edge2.layer === 'E') {
+        var kf = _lbl.F2L_FORMULAS[edge2.slot];
+        if (kf) rec('F2L', '邊塊【'+mt.n+'】踢出', kf.right);
+        continue;
+      }
+      if (edge2.layer === 'D') {
+        var cs = [];
+        for (var k = 0; k < MID.length; k++) {
+          if (k !== mi && _lbl.edgeOK(s, MID[k])) cs.push(MID[k]);
+        }
+        var sol = _lbl.findF2LInsert(s, mt, cs);
+        if (sol) {
+          if (sol.setup.length > 0) rec('F2L', '邊塊對齊【'+mt.n+'】', sol.setup);
+          rec('F2L', sol.dir+'插入邊塊【'+mt.n+'】', sol.formula);
+        } else break;
+      }
+    }
+  }
+
+  // === OLL: S4 (internally modifies) + S5 (does NOT modify) ===
+  var r4 = _lbl.solveStage4(s);
+  if (r4) r4.steps.forEach(function(st){ recOnly('OLL', st.explain, st.moves); });
+  
+  var r5 = _lbl.solveStage5(s);
+  if (r5 && r5.moves.length > 0) {
+    _lbl.dms(s, r5.moves);
+    r5.steps.forEach(function(st){ recOnly('OLL', st.explain, st.moves); });
+  }
+
+  // === PLL: S6 (internally modifies) + S7 (internally modifies) ===
+  var r6 = _lbl.solveStage6(s);
+  if (r6) r6.steps.forEach(function(st){ recOnly('PLL', st.explain, st.moves); });
+  
+  var r7 = _lbl.solveStage7(s);
+  if (r7) r7.steps.forEach(function(st){ if(st.moves.length>0) recOnly('PLL', st.explain, st.moves); });
+
+  return {script:script, mc:mc, state:s};
+};
+// ===== INTEGRATION: faceColors → LBL Engine → UI =====
+const STAGE_NAMES={Cross:'Cross 白色十字 ✚',F2L:'F2L 前兩層 🔲',OLL:'OLL 頂層方向 ✚',PLL:'PLL 頂層排列 🔀'};
+const STAGE_COLORS={Cross:'#FFFFFF',F2L:'#00D2FF',OLL:'#FFD500',PLL:'#FFD500'};
+const STAGE_TIPS={Cross:'找到白色邊塊，踢到底層再拉上來！',F2L:'把角塊和邊塊配對裝入',OLL:'認準圖案做出黃色十字',PLL:'⚠️ 上面會暫時亂掉，不要怕！'};
+
+function doLBLSolve(){
+  // Stop camera
+  try{if(vid&&vid.srcObject){vid.srcObject.getTracks().forEach(function(t){t.stop();});vid.srcObject=null;}}catch(e){}
+  if(vid)vid.style.display='none';
+  document.querySelector('.wrap').style.background='#000';
+  if(ov)ov.style.display='none';
+  
+  document.getElementById('topBar').style.display='none';
+  document.getElementById('botBar').style.display='none';
+  
+  // Show computing overlay
+  document.getElementById('info').textContent='🧩 LBL 引擎計算中...';
+  
+  // Run engine
+  setTimeout(function(){
+    try{
+      var initState={};
+      ['U','R','F','D','L','B'].forEach(function(f){initState[f]=faceColors[f].slice();});
+      var result=_lbl.cfopEngine(initState);
+      
+      // Verify
+      var solved=_lbl.solved(),ok=true;
+      ['U','R','F','D','L','B'].forEach(function(f){for(var i=0;i<9;i++){if(result.state[f][i]!==solved[f][i])ok=false;}});
+      
+      if(!ok){
+        alert('⚠️ LBL 引擎無法完全還原此狀態。\n可能是顏色辨識有誤，請重新掃描或手動修正。');
+        location.reload();
+        return;
+      }
+      
+      // Build solution array + stage markers
+      solution=[];
+      window._lblStageMarkers=[];
+      var totalMoves=0;
+      for(var i=0;i<result.script.length;i++){
+        var step=result.script[i];
+        window._lblStageMarkers.push({idx:totalMoves,stage:step.stage,explain:step.explain});
+        for(var j=0;j<step.moves.length;j++)solution.push(step.moves[j]);
+        totalMoves+=step.moves.length;
+      }
+      
+      // Setup cubeState
+      ['U','R','F','D','L','B'].forEach(function(f){cubeState[f]=faceColors[f].slice();});
+      solveStep=-1;
+      mode='solve';
+      
+      showSolveStep();
+    }catch(e){
+      alert('LBL 引擎錯誤: '+e.message);
+      location.reload();
+    }
+  },50);
+}
+
+function getLBLStageInfo(stepIndex){
+  if(!window._lblStageMarkers)return null;
+  var m=window._lblStageMarkers,cur=null;
+  for(var i=0;i<m.length;i++){if(m[i].idx<=stepIndex)cur=m[i];else break;}
+  return cur;
+}
+
+// ===== CUBE STATE MANIPULATION =====
+function rotateCW(f){var s=cubeState[f];cubeState[f]=[s[6],s[3],s[0],s[7],s[4],s[1],s[8],s[5],s[2]];}
+function cycle(f){
+  var s=cubeState;var t;
+  switch(f){
+    case'U':t=[s.F[0],s.F[1],s.F[2]];s.F[0]=s.R[0];s.F[1]=s.R[1];s.F[2]=s.R[2];s.R[0]=s.B[0];s.R[1]=s.B[1];s.R[2]=s.B[2];s.B[0]=s.L[0];s.B[1]=s.L[1];s.B[2]=s.L[2];s.L[0]=t[0];s.L[1]=t[1];s.L[2]=t[2];break;
+    case'D':t=[s.F[6],s.F[7],s.F[8]];s.F[6]=s.L[6];s.F[7]=s.L[7];s.F[8]=s.L[8];s.L[6]=s.B[6];s.L[7]=s.B[7];s.L[8]=s.B[8];s.B[6]=s.R[6];s.B[7]=s.R[7];s.B[8]=s.R[8];s.R[6]=t[0];s.R[7]=t[1];s.R[8]=t[2];break;
+    case'R':t=[s.F[2],s.F[5],s.F[8]];s.F[2]=s.D[2];s.F[5]=s.D[5];s.F[8]=s.D[8];s.D[2]=s.B[6];s.D[5]=s.B[3];s.D[8]=s.B[0];s.B[0]=s.U[8];s.B[3]=s.U[5];s.B[6]=s.U[2];s.U[2]=t[0];s.U[5]=t[1];s.U[8]=t[2];break;
+    case'L':t=[s.F[0],s.F[3],s.F[6]];s.F[0]=s.U[0];s.F[3]=s.U[3];s.F[6]=s.U[6];s.U[0]=s.B[8];s.U[3]=s.B[5];s.U[6]=s.B[2];s.B[2]=s.D[6];s.B[5]=s.D[3];s.B[8]=s.D[0];s.D[0]=t[0];s.D[3]=t[1];s.D[6]=t[2];break;
+    case'F':t=[s.U[6],s.U[7],s.U[8]];s.U[6]=s.L[8];s.U[7]=s.L[5];s.U[8]=s.L[2];s.L[2]=s.D[0];s.L[5]=s.D[1];s.L[8]=s.D[2];s.D[0]=s.R[6];s.D[1]=s.R[3];s.D[2]=s.R[0];s.R[0]=t[0];s.R[3]=t[1];s.R[6]=t[2];break;
+    case'B':t=[s.U[0],s.U[1],s.U[2]];s.U[0]=s.R[2];s.U[1]=s.R[5];s.U[2]=s.R[8];s.R[2]=s.D[8];s.R[5]=s.D[7];s.R[8]=s.D[6];s.D[6]=s.L[0];s.D[7]=s.L[3];s.D[8]=s.L[6];s.L[0]=t[2];s.L[3]=t[1];s.L[6]=t[0];break;
+  }
+}
+function applyMove(mv){var f=mv[0],p=mv.indexOf("'")>0,d=mv.indexOf('2')>0,n=d?2:(p?3:1);for(var i=0;i<n;i++){rotateCW(f);cycle(f);}}
+function undoMoveOnState(mv){var f=mv[0],p=mv.indexOf("'")>0,d=mv.indexOf('2')>0,n=d?2:(p?1:3);for(var i=0;i<n;i++){rotateCW(f);cycle(f);}}
+
+// ===== SOLVE STEP UI =====
+function showConfetti(){var c=document.createElement('div');c.style.cssText='position:fixed;inset:0;z-index:999;pointer-events:none;overflow:hidden';var colors=['#FFD700','#00D2FF','#FF5800','#009B48','#B71234','#fff'];for(var i=0;i<40;i++){var p=document.createElement('div');var sz=6+Math.random()*8;p.style.cssText='position:absolute;left:'+Math.random()*100+'%;top:-10px;width:'+sz+'px;height:'+sz+'px;background:'+colors[i%colors.length]+';border-radius:'+(Math.random()>.5?'50%':'2px')+';animation:confetti-fall '+(1+Math.random()*1.5)+'s '+(Math.random()*0.5)+'s ease-in forwards';c.appendChild(p);}document.body.appendChild(c);setTimeout(function(){c.remove();},3000);}
+
+function showGridIn(id,colors,highlights){
+  var el=document.getElementById(id);el.style.display='grid';el.style.width='78px';el.style.gridTemplateColumns='repeat(3,1fr)';el.style.gap='2px';el.style.margin='4px auto';
+  el.innerHTML=colors.map(function(c,i){var hl=highlights&&highlights[i];var border=hl?'2px solid #FFD700':'1px solid rgba(0,0,0,.2)';var opacity=highlights?(hl?'1':'.35'):'1';var shadow=hl?'box-shadow:0 0 6px rgba(255,215,0,.6);':'';return'<div class="mcell" style="background:'+(CMAP[c]||'#333')+';border:'+border+';opacity:'+opacity+';'+shadow+'"></div>';}).join('');
+}
+
+function drawMoveDiagram(mv){
+  var face=mv[0],prime=mv.indexOf("'")>=0,dbl=mv.indexOf('2')>=0;
+  var el=document.getElementById('sMoveVis');var ac='#FFD700';var n=dbl?2:1;var ag=16;
+  function mkA(svg,cx,cy,dx,dy,cnt){var len=Math.sqrt(dx*dx+dy*dy)||1;var ux=dx/len,uy=dy/len,px=-uy,py=ux;var aLen=22,headW=14,bodyW=8,headLen=12,bodyLen=aLen-headLen;for(var i=0;i<cnt;i++){var off=(i-(cnt-1)/2)*ag;var bx=cx+px*off,by=cy+py*off;var local=[[-bodyLen,-bodyW/2],[0,-bodyW/2],[0,-headW/2],[headLen,0],[0,headW/2],[0,bodyW/2],[-bodyLen,bodyW/2]];var pts=local.map(function(p){return[(bx+p[0]*ux-p[1]*uy).toFixed(1),(by+p[0]*uy+p[1]*ux).toFixed(1)].join(',');}).join(' ');svg+='<polygon points="'+pts+'" fill="'+ac+'" stroke="rgba(0,0,0,.3)" stroke-width="1" stroke-linejoin="round"/>';}return svg;}
+  if(face==='B'){var w=180,h=160;var svg='<svg width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'">';var fs=66,cs=fs/3,fx=20,fy=35;var rcw=cs*0.7,rsk=7,rx=fx+fs+3,ry=fy;for(var r=0;r<3;r++)for(var c=0;c<3;c++)svg+='<rect x="'+(fx+c*cs+1)+'" y="'+(fy+r*cs+1)+'" width="'+(cs-2)+'" height="'+(cs-2)+'" rx="2" fill="rgba(255,255,255,.12)" stroke="rgba(255,255,255,.35)" stroke-width="1"/>';for(var r2=0;r2<3;r2++)for(var c2=0;c2<3;c2++){var x=rx+c2*rcw,y=ry+r2*cs+c2*rsk;var hl2=c2===2;var pts2=[[x,y],[x+rcw-1,y+rsk],[x+rcw-1,y+cs-1+rsk],[x,y+cs-1]].map(function(p2){return p2.join(',');}).join(' ');svg+='<polygon points="'+pts2+'" fill="'+(hl2?'rgba(255,215,0,.2)':'rgba(255,255,255,.12)')+'" stroke="'+(hl2?ac:'rgba(255,255,255,.35)')+'" stroke-width="'+(hl2?'1.5':'1')+'"/>';}if(prime)svg=mkA(svg,rx+rcw*2.5+rsk*2,fy+fs+rsk*2+8,0,18,n);else svg=mkA(svg,rx+rcw*2.5+rsk*2,fy-8,0,-18,n);svg+='</svg>';el.innerHTML=svg;return;}
+  var sz=120,cs2=sz/3,pad=30,tw=sz+pad*2,th=sz+pad*2;
+  var svg2='<svg width="'+tw+'" height="'+th+'" viewBox="0 0 '+tw+' '+th+'">';var ox=pad,oy=pad;
+  for(var r3=0;r3<3;r3++)for(var c3=0;c3<3;c3++)svg2+='<rect x="'+(ox+c3*cs2+1)+'" y="'+(oy+r3*cs2+1)+'" width="'+(cs2-2)+'" height="'+(cs2-2)+'" rx="3" fill="rgba(255,255,255,.12)" stroke="rgba(255,255,255,.35)" stroke-width="1"/>';
+  var hl3='rgba(255,215,0,.15)',hlS='rgba(255,215,0,.5)';
+  switch(face){
+    case'R':svg2+='<rect x="'+(ox+cs2*2)+'" y="'+oy+'" width="'+cs2+'" height="'+sz+'" rx="4" fill="'+hl3+'" stroke="'+hlS+'"/>';if(prime)svg2=mkA(svg2,ox+cs2*2.5,oy+sz+8,0,18,n);else svg2=mkA(svg2,ox+cs2*2.5,oy-8,0,-18,n);break;
+    case'L':svg2+='<rect x="'+ox+'" y="'+oy+'" width="'+cs2+'" height="'+sz+'" rx="4" fill="'+hl3+'" stroke="'+hlS+'"/>';if(prime)svg2=mkA(svg2,ox+cs2*0.5,oy-8,0,-18,n);else svg2=mkA(svg2,ox+cs2*0.5,oy+sz+8,0,18,n);break;
+    case'U':svg2+='<rect x="'+ox+'" y="'+oy+'" width="'+sz+'" height="'+cs2+'" rx="4" fill="'+hl3+'" stroke="'+hlS+'"/>';if(prime)svg2=mkA(svg2,ox+sz+8,oy+cs2*0.5,18,0,n);else svg2=mkA(svg2,ox-8,oy+cs2*0.5,-18,0,n);break;
+    case'D':svg2+='<rect x="'+ox+'" y="'+(oy+cs2*2)+'" width="'+sz+'" height="'+cs2+'" rx="4" fill="'+hl3+'" stroke="'+hlS+'"/>';if(prime)svg2=mkA(svg2,ox-8,oy+cs2*2.5,-18,0,n);else svg2=mkA(svg2,ox+sz+8,oy+cs2*2.5,18,0,n);break;
+    case'F':svg2+='<rect x="'+ox+'" y="'+oy+'" width="'+sz+'" height="'+sz+'" rx="6" fill="'+hl3+'" stroke="'+hlS+'"/>';if(prime){svg2=mkA(svg2,ox-8,oy+cs2*0.5,-18,0,n);svg2=mkA(svg2,ox+sz+8,oy+cs2*2.5,18,0,n);}else{svg2=mkA(svg2,ox+sz+8,oy+cs2*0.5,18,0,n);svg2=mkA(svg2,ox-8,oy+cs2*2.5,-18,0,n);}break;
+  }
+  svg2+='</svg>';el.innerHTML=svg2;
+}
+
+function showSolveStep(){
+  if(solveStep===-1){solveStep++;if(solveStep>0)applyMove(solution[solveStep-1]);}
+  if(solveStep>=solution.length){showConfetti();document.getElementById('solveUI').style.display='none';document.getElementById('doneOv').classList.add('show');return;}
+  document.getElementById('botBar').style.display='none';document.getElementById('topBar').style.display='none';
+  document.getElementById('solveUI').style.display='flex';
+  var mv=solution[solveStep];var face=mv[0];
+  // Stage label
+  var si=getLBLStageInfo(solveStep);
+  var sl=document.getElementById('stageLabel');
+  if(si){var sn=STAGE_NAMES[si.stage]||si.stage;sl.innerHTML='<span style="display:inline-block;padding:3px 12px;border-radius:20px;font-size:12px;font-weight:800;background:rgba(255,215,0,.15);color:'+(STAGE_COLORS[si.stage]||'#FFD700')+';border:1px solid rgba(255,215,0,.2)">'+sn+'</span><div style="font-size:11px;color:rgba(255,255,255,.5);margin-top:2px">'+si.explain+'</div>';}
+  // Before grid
+  var beforeF=cubeState.F.slice();
+  showGridIn('beforeGrid',beforeF);
+  // Apply temporarily for after view
+  applyMove(mv);var afterF=cubeState.F.slice();undoMoveOnState(mv);
+  var diffF=beforeF.map(function(c,i){return c!==afterF[i];});
+  showGridIn('afterGrid',afterF,diffF);
+  showGridIn('beforeGrid',beforeF,diffF);
+  // Move info
+  document.getElementById('sMoveLabel').textContent=mv;
+  document.getElementById('sMoveDesc').textContent=MDESC_KID[mv]||mv;
+  var tip=si&&STAGE_TIPS[si.stage]?'💡 '+STAGE_TIPS[si.stage]:'';
+  document.getElementById('sMoveProg').innerHTML='第 '+(solveStep+1)+' 步 / 共 '+solution.length+' 步'+(tip?'<br><span style="color:rgba(255,215,0,.6);font-size:10px">'+tip+'</span>':'');
+  drawMoveDiagram(mv);
+  // Buttons
+  document.getElementById('sBtnRow').innerHTML='<button class="btn btn-sm" style="background:rgba(255,255,255,.15);color:#fff" onclick="prevMove()">← 上一步</button><button class="btn" onclick="nextMove()">'+(solveStep>=solution.length-1?'🎉 完成！':'下一步 →')+'</button>';
+}
+function nextMove(){solveStep++;if(solveStep>0&&solveStep<=solution.length)applyMove(solution[solveStep-1]);showSolveStep();}
+function prevMove(){if(solveStep<=0)return;undoMoveOnState(solution[solveStep-1]);solveStep--;showSolveStep();}
+
+// Wake lock
+(async function(){try{await navigator.wakeLock.request('screen');}catch(e){}})();
+</script>
+</body></html>
