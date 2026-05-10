@@ -66,6 +66,14 @@ canvas#ov{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:n
  <div style="font-size:14px;color:rgba(255,255,255,.5);margin-top:4px">太厲害了！你做到了！</div>
  <button class="btn" style="margin-top:16px" onclick="location.reload()">再來一次</button>
 </div>
+<!-- Level Briefing Overlay -->
+<div class="overlay" id="levelBrief" onclick="event.stopPropagation()" style="z-index:30;background:rgba(0,0,0,.95)">
+ <div id="levelBriefContent" style="max-width:340px;text-align:center;padding:16px"></div>
+</div>
+<!-- Level Complete Overlay -->
+<div class="overlay" id="levelDone" onclick="event.stopPropagation()" style="z-index:30;background:rgba(0,0,0,.92)">
+ <div id="levelDoneContent" style="max-width:340px;text-align:center;padding:16px"></div>
+</div>
 </div>
 <script>
 // ===== CONSTANTS =====
@@ -1327,8 +1335,7 @@ function doLBLSolve(){
       solveStep=-1;
       mode='solve';
       
-      showSolveStep();
-      // Compute energy path
+      // Compute energy path first, then show level briefing
       setTimeout(function(){
         if(!window._lblStageMarkers||!solution.length)return;
         var replay={};['U','R','F','D','L','B'].forEach(function(f){replay[f]=faceColors[f].slice();});
@@ -1342,6 +1349,12 @@ function doLBLSolve(){
           m.energyAfter=window._energyAtStep[nextIdx];
           m.energyDrop=m.energyBefore-m.energyAfter;
         });
+        // Show Level 1 briefing instead of directly starting
+        document.getElementById('startOv').style.display='none';
+        document.getElementById('solveUI').style.display='flex';
+        document.getElementById('botBar').style.display='none';
+        document.getElementById('topBar').style.display='none';
+        levelMgr.showBriefing(1);
       },100);
     }catch(e){
       alert('CFOP 引擎錯誤: '+e.message);
@@ -1499,9 +1512,130 @@ function classifySpell(stage,explain){
   return{name:explain,icon:'🔮',type:'基礎',typeIcon:'⚙️'};
 }
 
+// ===== LEVEL BRIEFING SYSTEM (冒險任務書) =====
+var levelMgr={
+  current:0, // 0=not started, 1/2/3=active level
+  levels:[
+    {num:1,title:'第 1 關：地基工程 🏗️',icon:'✚',goal:'完成底部的白色十字',stages:['Cross'],
+     spells:[{icon:'✚',name:'白色十字',type:'吸入咒',desc:'找到白色邊塊，用最短路徑送到底層'}],
+     tip:'每一步都在把白色邊塊「吸」到正確位置！'},
+    {num:2,title:'第 2 關：好朋友回家 🏠',icon:'🏠',goal:'把前兩層的角塊和邊塊都配對送回家',stages:['F2L'],
+     spells:[{icon:'🕳️',name:'地洞脫逃',type:'吸入咒',desc:'把卡住的方塊踢到底層'},{icon:'🏠',name:'好朋友回家',type:'吸入咒',desc:'角塊和邊塊配成一對，一起插入'}],
+     tip:'先找到「好朋友」（同色的角+邊），再一起送回家！'},
+    {num:3,title:'第 3 關：能量歸零 ⚡',icon:'☀️',goal:'頂層全黃 → 完美排列 → 魔方還原！',stages:['OLL','PLL'],
+     spells:[{icon:'✚',name:'十字咒',type:'翻轉咒',desc:'讓頂面出現黃色十字'},{icon:'🐟',name:'小魚咒',type:'翻轉咒',desc:'讓頂面全部變黃'},{icon:'🏗️',name:'大搬家',type:'換位咒',desc:'把頂層色塊搬到正確位置'}],
+     tip:'翻轉咒讓顏色翻對，換位咒讓位置歸位！'}
+  ],
+  stageToLevel:function(stage){
+    if(stage==='Cross')return 1;
+    if(stage==='F2L')return 2;
+    return 3;
+  },
+  getLevelBounds:function(lv){
+    if(!window._lblStageMarkers)return{start:0,end:0};
+    var start=-1,end=solution.length;
+    var targetStages=this.levels[lv-1].stages;
+    for(var i=0;i<window._lblStageMarkers.length;i++){
+      var m=window._lblStageMarkers[i];
+      if(targetStages.indexOf(m.stage)>=0&&start<0)start=m.idx;
+    }
+    // Find end: first marker NOT in this level's stages after start
+    for(var i=0;i<window._lblStageMarkers.length;i++){
+      var m=window._lblStageMarkers[i];
+      if(m.idx>start&&targetStages.indexOf(m.stage)<0){end=m.idx;break;}
+    }
+    if(start<0)start=0;
+    return{start:start,end:end};
+  },
+  getLevelEnergy:function(lv){
+    var b=this.getLevelBounds(lv);
+    if(!window._energyAtStep)return{before:0,after:0,drop:0};
+    var before=window._energyAtStep[b.start]||0;
+    var after=window._energyAtStep[b.end]||0;
+    return{before:before,after:after,drop:before-after};
+  },
+  showBriefing:function(lv){
+    this.current=lv;
+    var L=this.levels[lv-1];
+    var e=this.getLevelEnergy(lv);
+    var b=this.getLevelBounds(lv);
+    var steps=b.end-b.start;
+    var medals='';
+    for(var i=1;i<=3;i++){
+      var done=i<lv,now=i===lv;
+      medals+='<span style="font-size:32px;margin:0 6px;'+(done?'':'opacity:.3')+'">'+
+        (done?'🏅':now?'⭐':'🔒')+'</span>';
+    }
+    var spellHTML='';
+    L.spells.forEach(function(sp){
+      spellHTML+='<div style="display:flex;align-items:center;gap:8px;background:rgba(255,215,0,.08);border:1px solid rgba(255,215,0,.15);border-radius:10px;padding:8px 12px;margin:4px 0;text-align:left">'+
+        '<span style="font-size:24px">'+sp.icon+'</span>'+
+        '<div><div style="font-size:13px;font-weight:800;color:#FFD700">'+sp.name+' <span style="font-size:10px;color:rgba(255,255,255,.4)">('+sp.type+')</span></div>'+
+        '<div style="font-size:11px;color:rgba(255,255,255,.5)">'+sp.desc+'</div></div></div>';
+    });
+    var html='<div style="margin-bottom:12px">'+medals+'</div>'+
+      '<div style="font-size:22px;font-weight:900;color:#FFD700;margin-bottom:4px">'+L.title+'</div>'+
+      '<div style="background:rgba(0,210,255,.1);border:1px solid rgba(0,210,255,.2);border-radius:10px;padding:10px;margin:10px 0">'+
+        '<div style="font-size:13px;color:#00D2FF;font-weight:800">🎯 任務目標</div>'+
+        '<div style="font-size:15px;color:#fff;margin-top:4px">'+L.goal+'</div>'+
+        (e.drop>0?'<div style="font-size:12px;color:#00E676;margin-top:4px">⚡ 預計消除能量 ↓'+e.drop+' ('+steps+'步)</div>':'')+
+      '</div>'+
+      '<div style="font-size:13px;color:rgba(255,255,255,.5);margin:8px 0 4px">📖 本關咒語：</div>'+
+      spellHTML+
+      '<div style="font-size:12px;color:rgba(255,255,255,.35);margin-top:8px;font-style:italic">💡 '+L.tip+'</div>'+
+      '<button class="btn" style="margin-top:14px;font-size:16px;padding:14px 36px" onclick="levelMgr.startLevel()">我知道了，開始挑戰！</button>';
+    document.getElementById('levelBriefContent').innerHTML=html;
+    document.getElementById('levelBrief').classList.add('show');
+  },
+  startLevel:function(){
+    document.getElementById('levelBrief').classList.remove('show');
+    showSolveStep();
+  },
+  showLevelComplete:function(lv){
+    var L=this.levels[lv-1];
+    var e=this.getLevelEnergy(lv);
+    var b=this.getLevelBounds(lv);
+    var steps=b.end-b.start;
+    var nextLv=lv+1;
+    var html='<div style="font-size:48px;margin-bottom:8px">🏅</div>'+
+      '<div style="font-size:20px;font-weight:900;color:#00D2FF">'+L.title+'</div>'+
+      '<div style="font-size:18px;font-weight:900;color:#00E676;margin-top:6px">✅ 過關！</div>'+
+      '<div style="font-size:13px;color:rgba(255,255,255,.5);margin-top:6px">完成 '+steps+' 步 · 消除能量 ↓'+e.drop+'</div>'+
+      (nextLv<=3?
+        '<button class="btn" style="margin-top:16px;font-size:16px;padding:14px 36px" onclick="levelMgr.nextLevel()">前進第 '+nextLv+' 關 →</button>':
+        '');
+    document.getElementById('levelDoneContent').innerHTML=html;
+    document.getElementById('levelDone').classList.add('show');
+    showConfetti();
+  },
+  nextLevel:function(){
+    document.getElementById('levelDone').classList.remove('show');
+    this.showBriefing(this.current+1);
+  },
+  checkLevelTransition:function(stepIdx){
+    // Check if this step crosses into a new level
+    var si=getLBLStageInfo(stepIdx);
+    if(!si)return false;
+    var newLv=this.stageToLevel(si.stage);
+    if(newLv>this.current){
+      // Level transition! Show completion of current level, then briefing for next
+      this.showLevelComplete(this.current);
+      return true; // signal to pause
+    }
+    return false;
+  }
+};
+
 function showSolveStep(){
   if(solveStep===-1){solveStep++;if(solveStep>0)applyMove(solution[solveStep-1]);}
   if(solveStep>=solution.length){showConfetti();document.getElementById('solveUI').style.display='none';document.getElementById('doneOv').classList.add('show');return;}
+  // === Level transition check ===
+  if(levelMgr.current>0&&levelMgr.current<3){
+    var si2=getLBLStageInfo(solveStep);
+    if(si2){var newLv=levelMgr.stageToLevel(si2.stage);
+      if(newLv>levelMgr.current){levelMgr.showLevelComplete(levelMgr.current);return;}
+    }
+  }
   document.getElementById('botBar').style.display='none';document.getElementById('topBar').style.display='none';
   document.getElementById('solveUI').style.display='flex';
   var mv=solution[solveStep];var face=mv[0];
