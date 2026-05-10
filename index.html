@@ -1475,12 +1475,7 @@ MOVE_IMGS['B2']=MOVE_IMGS['B'];
 function miniArrowSVG(mv){
   var src=MOVE_IMGS[mv];
   if(!src) return '<span style="font-size:20px;font-weight:900;color:#FFD700;font-family:monospace">'+mv+'</span>';
-  var dbl=mv.indexOf('2')>=0;
-  var img='<img src="'+src+'" style="width:100%;height:100%;object-fit:contain;display:block" alt="'+mv+'">';
-  if(dbl){
-    return '<div style="position:relative;display:inline-block">'+img+'<span style="position:absolute;right:6%;top:2%;font-size:280%;font-weight:900;color:rgba(255,215,0,.7);font-family:monospace;line-height:1;pointer-events:none;text-shadow:1px 1px 4px rgba(0,0,0,.6)">2</span></div>';
-  }
-  return img;
+  return '<img src="'+src+'" style="width:100%;height:100%;display:block;border-radius:8px" alt="'+mv+'">';
 }
 
 
@@ -1565,7 +1560,7 @@ function showSolveStep(){
     }
     // === Sync arrowImg: same fW ===
     var arImg=document.getElementById('arrowDiagram');
-    if(arImg){arImg.style.width=fW+'px';arImg.style.height=fW+'px';var img=arImg.querySelector('img');if(img){img.style.width='100%';img.style.height='100%';img.style.objectFit='contain';}var wrap=arImg.querySelector('div');if(wrap){wrap.style.width='100%';wrap.style.height='100%';}}
+    if(arImg){arImg.style.width=fW+'px';arImg.style.height=fW+'px';var img=arImg.querySelector('img');if(img){img.style.width=fW+'px';img.style.height=fW+'px';}}
   })();
   // Move info
   document.getElementById('sMoveLabel').textContent=mv;
@@ -1602,7 +1597,21 @@ function showSolveStep(){
   document.getElementById('sMoveProg').innerHTML='第'+(solveStep+1)+'/'+solution.length;
   // Arrow diagram with move letter in center
   var arrowEl=document.getElementById('arrowDiagram');
-  if(arrowEl)arrowEl.innerHTML=miniArrowSVG(mv);
+  if(arrowEl){
+    arrowEl.innerHTML=miniArrowSVG(mv);
+    arrowEl.style.position='relative';
+    arrowEl.style.overflow='hidden';
+    // Add "2" watermark for x2 moves
+    var dbl=mv.indexOf('2')>=0;
+    var oldWm=arrowEl.querySelector('.x2wm');if(oldWm)oldWm.remove();
+    if(dbl){
+      var wm=document.createElement('span');
+      wm.className='x2wm';
+      wm.textContent='2';
+      wm.style.cssText='position:absolute;right:5%;top:3%;font-size:42px;font-weight:900;color:rgba(255,215,0,.75);font-family:monospace;line-height:1;pointer-events:none;text-shadow:1px 1px 3px rgba(0,0,0,.7)';
+      arrowEl.appendChild(wm);
+    }
+  }
   var ml2=document.getElementById('sMoveLabel');if(ml2)ml2.style.display='none';
   var md2=document.getElementById('sMoveDesc');if(md2)md2.style.display='none';
   // Buttons
