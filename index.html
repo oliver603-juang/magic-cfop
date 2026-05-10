@@ -1462,13 +1462,6 @@ function miniArrowSVG(mv) {
 }
 
 // === 6-Face renderFace for T-shape unfolded view ===
-function renderFace6(fc,hl,ox,oy,sz){
-  var h='';for(var r=0;r<3;r++)for(var c=0;c<3;c++){var idx=r*3+c,bg=CMAP[fc[idx]]||'#333',x=ox+c*sz,y=oy+r*sz,isH=hl&&hl[idx];
-  h+='<rect x="'+x+'" y="'+y+'" width="'+sz+'" height="'+sz+'" rx="2" fill="'+bg+'" stroke="'+(isH?'#FFD700':'rgba(0,0,0,.25)')+'" stroke-width="'+(isH?1:0.5)+'"/>';
-  if(hl&&!isH){h+='<line x1="'+(x+3)+'" y1="'+(y+3)+'" x2="'+(x+sz-3)+'" y2="'+(y+sz-3)+'" stroke="rgba(0,0,0,.35)" stroke-width="1"/><line x1="'+(x+sz-3)+'" y1="'+(y+3)+'" x2="'+(x+3)+'" y2="'+(y+sz-3)+'" stroke="rgba(0,0,0,.35)" stroke-width="1"/>';}
-  if(isH)h+='<text x="'+(x+sz/2)+'" y="'+(y+sz/2+1)+'" text-anchor="middle" dominant-baseline="central" font-size="'+(sz*.35)+'" fill="rgba(0,0,0,.4)">★</text>';}
-  return h;
-}
 
 
 // === MOVE_AFFECTED: structural positions affected per move ===
@@ -1482,8 +1475,8 @@ var MOVE_AFFECTED={
 };
 
 // === renderFace6: morandi gray inset shadow for affected cells, X for unaffected ===
-function renderFace6(fc,hl,ox,oy,sz){
-  var h='';for(var r=0;r<3;r++)for(var c=0;c<3;c++){var idx=r*3+c,bg=CMAP[fc[idx]]||'#333',x=ox+c*sz,y=oy+r*sz,isH=hl&&hl[idx];
+function renderFace6(fc,hl,ox,oy,sz,flipV){
+  var h='';for(var r=0;r<3;r++)for(var c=0;c<3;c++){var idx=r*3+c;var srcIdx=flipV?((2-r)*3+c):idx;var bg=CMAP[fc[srcIdx]]||'#333',x=ox+c*sz,y=oy+r*sz,isH=hl&&hl[srcIdx];
   h+='<rect x="'+x+'" y="'+y+'" width="'+sz+'" height="'+sz+'" rx="2" fill="'+bg+'" stroke="rgba(0,0,0,.15)" stroke-width="0.5"/>';
   if(isH){h+='<rect x="'+x+'" y="'+y+'" width="'+sz+'" height="3" fill="rgba(0,0,0,.45)"/><rect x="'+x+'" y="'+y+'" width="3" height="'+sz+'" fill="rgba(0,0,0,.45)"/><rect x="'+x+'" y="'+(y+sz-3)+'" width="'+sz+'" height="3" fill="rgba(255,255,255,.35)"/><rect x="'+(x+sz-3)+'" y="'+y+'" width="3" height="'+sz+'" fill="rgba(255,255,255,.35)"/><rect x="'+(x+1)+'" y="'+(y+1)+'" width="'+(sz-2)+'" height="'+(sz-2)+'" rx="1" fill="rgba(0,0,0,.1)"/>';}
   if(hl&&!isH){h+='<line x1="'+(x+3)+'" y1="'+(y+3)+'" x2="'+(x+sz-3)+'" y2="'+(y+sz-3)+'" stroke="rgba(0,0,0,.35)" stroke-width="1"/><line x1="'+(x+sz-3)+'" y1="'+(y+3)+'" x2="'+(x+3)+'" y2="'+(y+sz-3)+'" stroke="rgba(0,0,0,.35)" stroke-width="1"/>';}}
@@ -1578,15 +1571,15 @@ function showSolveStep(){
     var cH=container.getBoundingClientRect().height;var cW=container.getBoundingClientRect().width;
     if(cH<50)return; // not visible yet
     var cs=23,fW=cs*3,g=1;
-    var pos={U:{x:fW+g,y:8},L:{x:0,y:fW+g+8},F:{x:fW+g,y:fW+g+8},R:{x:(fW+g)*2,y:fW+g+8},B:{x:fW+g,y:(fW+g)*2+8},D:{x:fW+g,y:(fW+g)*3+8}};
+    var pos={U:{x:fW+g,y:8},L:{x:0,y:fW+g+8},F:{x:fW+g,y:fW+g+8},R:{x:(fW+g)*2,y:fW+g+8},D:{x:fW+g,y:(fW+g)*2+8},B:{x:fW+g,y:(fW+g)*3+8}};
     var tW=(fW+g)*3,tH=(fW+g)*4+10;
     var sc=Math.min(cW/tW,cH/tH,1.25);
     var dW=Math.floor(tW*sc),dH=Math.floor(tH*sc);
-    var df={};['U','L','F','R','B','D'].forEach(function(f){df[f]=[];for(var i=0;i<9;i++)df[f].push(bS2[f][i]!==aS2[f][i]);});
-    var lb={U:'上',L:'左',F:'前',R:'右',B:'後',D:'下'};
+    var df={};['U','L','F','R','D','B'].forEach(function(f){df[f]=[];for(var i=0;i<9;i++)df[f].push(bS2[f][i]!==aS2[f][i]);});
+    var lb={U:'上',L:'左',F:'前',R:'右',D:'下',B:'後'};
     var rf=renderFace6;function _rf_unused(fc,hl,ox,oy,sz){var h='';for(var r=0;r<3;r++)for(var c=0;c<3;c++){var idx=r*3+c,bg=CMAP[fc[idx]]||'#333',x=ox+c*sz,y=oy+r*sz,isH=hl&&hl[idx];h+='<rect x="'+x+'" y="'+y+'" width="'+sz+'" height="'+sz+'" rx="2" fill="'+bg+'" stroke="'+(isH?'#FFD700':'rgba(0,0,0,.25)')+'" stroke-width="'+(isH?1:0.5)+'"/>';if(hl&&!isH){h+='<line x1="'+(x+3)+'" y1="'+(y+3)+'" x2="'+(x+sz-3)+'" y2="'+(y+sz-3)+'" stroke="rgba(0,0,0,.35)" stroke-width="1"/><line x1="'+(x+sz-3)+'" y1="'+(y+3)+'" x2="'+(x+3)+'" y2="'+(y+sz-3)+'" stroke="rgba(0,0,0,.35)" stroke-width="1"/>';}if(isH){h+='<text x="'+(x+sz/2)+'" y="'+(y+sz/2+1)+'" text-anchor="middle" dominant-baseline="central" font-size="'+(sz*0.35)+'" fill="rgba(0,0,0,.4)">★</text>';}}return h;}
-    var svg='<svg viewBox="0 0 '+tW+' '+tH+'" width="'+dW+'" height="'+dH+'" style="display:block;margin:0 auto">';
-    ['U','L','F','R','B','D'].forEach(function(f){var p=pos[f];svg+='<text x="'+(p.x+fW/2)+'" y="'+(p.y-1)+'" text-anchor="middle" font-size="7" fill="rgba(255,255,255,.4)">'+lb[f]+'</text>';svg+=rf(aS2[f],df[f],p.x,p.y,cs);});
+    var svg='<svg viewBox="0 0 '+tW+' '+tH+'" width="'+dW+'" height="'+dH+'" >';
+    ['U','L','F','R','D','B'].forEach(function(f){var p=pos[f];svg+='<text x="'+(p.x+fW/2)+'" y="'+(p.y-1)+'" text-anchor="middle" font-size="7" fill="rgba(255,255,255,.4)">'+lb[f]+'</text>';svg+=rf(aS2[f],df[f],p.x,p.y,cs,f==='B');});
     svg+='</svg>';container.innerHTML=svg;
   })();
   showGridIn('beforeGrid',beforeF,diffF);
