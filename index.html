@@ -29,13 +29,14 @@ canvas#ov{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:n
 .sd{width:16px;height:16px;border-radius:4px;font-size:7px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.08);color:rgba(255,255,255,.3);font-family:monospace;font-weight:700}
 .sd.now{background:#FFD700;color:#000}.sd.done{background:rgba(0,210,255,.25);color:#00D2FF}
 @keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pulse{0%{transform:scale(1);opacity:0}50%{transform:scale(1.3);opacity:1}100%{transform:scale(1);opacity:1}}
 @keyframes confetti-fall{0%{transform:translateY(0) rotate(0deg);opacity:1}100%{transform:translateY(100vh) rotate(720deg);opacity:0}}
 </style></head><body>
 <div class="wrap">
 <video id="vid" autoplay playsinline muted></video><canvas id="ov"></canvas>
 <div class="top-bar" id="topBar"><div class="top-title" id="title">🧊 魔方小老師</div><div class="top-sub" id="sub"></div><div class="top-dots" id="dots"></div></div>
 <div class="bot-bar" id="botBar" style="display:none"><div class="info" id="info"></div><div class="mgrid" id="mgrid" style="display:none"></div><div class="btn-row" id="btnRow"></div></div>
-<div id="solveUI" style="display:none;position:absolute;inset:0;z-index:10;background:#000;flex-direction:column;align-items:center;justify-content:space-between;padding:10px 16px 16px;overflow-y:auto">
+<div id="solveUI" onclick="var x=event.clientX;var w=window.innerWidth;if(x>w*0.6)nextMove();else if(x<w*0.4)prevMove();" style="display:none;cursor:pointer;position:absolute;inset:0;z-index:10;background:#000;flex-direction:column;align-items:center;justify-content:space-between;padding:10px 16px 16px;overflow-y:auto">
  <div style="text-align:center;width:100%"><div id="stageLabel" style="margin-bottom:2px"></div><div style="font-size:11px;color:rgba(255,255,255,.4)">操作前（前紅面）</div><div class="mgrid" id="beforeGrid" style="display:grid;margin:4px auto"></div></div>
  <div style="text-align:center;width:100%;flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center">
   <div style="font-size:36px;font-weight:900;color:#FFD700;font-family:'Courier New',monospace" id="sMoveLabel">-</div>
@@ -1272,7 +1273,7 @@ _lbl.solve1LookPLL = function(state) {
 // ===== INTEGRATION: faceColors → LBL Engine → UI =====
 const STAGE_NAMES={Cross:'Cross 白色十字 ✚',F2L:'F2L 配對插入 🔲',OLL:'OLL 黃色全面 ☀️',PLL:'PLL 完美排列 🎯'};
 const STAGE_COLORS={Cross:'#FFFFFF',F2L:'#00D2FF',OLL:'#FFD500',PLL:'#FFD500'};
-const STAGE_TIPS={Cross:'🌟 IDDFS找到最短十字路徑！',F2L:'🔧 踢出→配對→插入！',OLL:'☀️ 讓底面全部變成黃色！',PLL:'🎯 一個公式，直接完成！'};
+const STAGE_TIPS={Cross:'把4個白色邊塊送回家，做出白色十字！',F2L:'找到角塊和邊塊好朋友，配對後一起送回家！',OLL:'讓底面全部變成黃色！認準圖案套公式！',PLL:'最後一個公式，搞定！'};
 
 function doLBLSolve(){
   // Stop camera
@@ -1378,6 +1379,28 @@ function drawMoveDiagram(mv){
   svg2+='</svg>';el.innerHTML=svg2;
 }
 
+// === Kid-friendly explain mapping ===
+function kidExplain(stage, explain) {
+  if(explain.indexOf("聯合踢出")>=0) return "🔨 把卡住的方塊踢到底層！";
+  if(explain.indexOf("D對齊")>=0) return "🔄 轉動底層，對準位置";
+  if(explain.indexOf("D旋轉")>=0) return "🔄 轉動底層重新嘗試";
+  if(explain.indexOf("F2L【紅藍】")>=0) return "🏠 紅藍好朋友回家！(右前插入)";
+  if(explain.indexOf("F2L【紅綠】")>=0) return "🏠 紅綠好朋友回家！(左前插入)";
+  if(explain.indexOf("F2L【橘綠】")>=0) return "🏠 橘綠好朋友回家！(左後插入)";
+  if(explain.indexOf("F2L【橘藍】")>=0) return "🏠 橘藍好朋友回家！(右後插入)";
+  if(explain.indexOf("踢出")>=0) return "🔨 卡住了！先踢出來再說！";
+  if(explain.indexOf("LBL")>=0) return "🔧 用基本手法處理";
+  if(explain.indexOf("黃色十字")>=0) return "✚ 做出黃色十字！";
+  if(explain.indexOf("OLL角塊")>=0) return "☀️ 小魚公式：角也要變黃！";
+  if(explain.indexOf("PLL(1-Look)")>=0) return "🎯 一個公式搞定！認準圖案直接套！";
+  if(explain.indexOf("PLL角塊")>=0) return "🎯 T-perm：交換兩個角塊！";
+  if(explain.indexOf("PLL邊塊")>=0) return "🎯 邊塊歸位公式！";
+  if(explain.indexOf("白色十字")>=0) return "✚ 最短路徑做出白色十字！";
+  if(explain.indexOf("最終對齊")>=0) return "🔄 最後微調，完美對齊！";
+  return explain;
+}
+var _lastStage = null;
+
 function showSolveStep(){
   if(solveStep===-1){solveStep++;if(solveStep>0)applyMove(solution[solveStep-1]);}
   if(solveStep>=solution.length){showConfetti();document.getElementById('solveUI').style.display='none';document.getElementById('doneOv').classList.add('show');return;}
@@ -1387,7 +1410,7 @@ function showSolveStep(){
   // Stage label
   var si=getLBLStageInfo(solveStep);
   var sl=document.getElementById('stageLabel');
-  if(si){var sn=STAGE_NAMES[si.stage]||si.stage;sl.innerHTML='<span style="display:inline-block;padding:3px 12px;border-radius:20px;font-size:12px;font-weight:800;background:rgba(255,215,0,.15);color:'+(STAGE_COLORS[si.stage]||'#FFD700')+';border:1px solid rgba(255,215,0,.2)">'+sn+'</span><div style="font-size:11px;color:rgba(255,255,255,.5);margin-top:2px">'+si.explain+'</div>';}
+  if(si){var sn=STAGE_NAMES[si.stage]||si.stage;var kidExp=kidExplain(si.stage,si.explain);var stageChanged=(_lastStage!==si.stage);_lastStage=si.stage;var pct=Math.round((solveStep+1)/solution.length*100);var badge=stageChanged?'<div style="animation:pulse .6s;font-size:15px;margin-bottom:4px;font-weight:800;color:#00D2FF">'+sn+' 開始！</div>':'';sl.innerHTML=badge+'<span style="display:inline-block;padding:3px 12px;border-radius:20px;font-size:12px;font-weight:800;background:rgba(255,215,0,.15);color:'+(STAGE_COLORS[si.stage]||'#FFD700')+';border:1px solid rgba(255,215,0,.2)">'+sn+'</span><div style="font-size:13px;color:#eee;margin-top:4px;line-height:1.5">'+kidExp+'</div><div style="width:80%;height:4px;background:rgba(255,255,255,.1);border-radius:2px;margin:6px auto 0"><div style="width:'+pct+'%;height:100%;background:linear-gradient(90deg,#00D2FF,#FFD700);border-radius:2px;transition:width .3s"></div></div>';}
   // Before grid
   var beforeF=cubeState.F.slice();
   showGridIn('beforeGrid',beforeF);
@@ -1400,10 +1423,12 @@ function showSolveStep(){
   document.getElementById('sMoveLabel').textContent=mv;
   document.getElementById('sMoveDesc').textContent=MDESC_KID[mv]||mv;
   var tip=si&&STAGE_TIPS[si.stage]?'💡 '+STAGE_TIPS[si.stage]:'';
+  // Add touch hint
+  tip+='<br><span style="color:rgba(255,255,255,.3);font-size:9px">👆 右側點擊下一步 | 左側點擊上一步</span>';
   document.getElementById('sMoveProg').innerHTML='第 '+(solveStep+1)+' 步 / 共 '+solution.length+' 步'+(tip?'<br><span style="color:rgba(255,215,0,.6);font-size:10px">'+tip+'</span>':'');
   drawMoveDiagram(mv);
   // Buttons
-  document.getElementById('sBtnRow').innerHTML='<button class="btn btn-sm" style="background:rgba(255,255,255,.15);color:#fff" onclick="prevMove()">← 上一步</button><button class="btn" onclick="nextMove()">'+(solveStep>=solution.length-1?'🎉 完成！':'下一步 →')+'</button>';
+  document.getElementById('sBtnRow').innerHTML='<button class="btn btn-sm" style="background:rgba(255,255,255,.15);color:#fff" onclick="prevMove()">← 上一步</button><button class="btn" onclick="nextMove()">'+(solveStep>=solution.length-1?'🎉 完成！':'下一步 ➡')+'</button>';
 }
 function nextMove(){solveStep++;if(solveStep>0&&solveStep<=solution.length)applyMove(solution[solveStep-1]);showSolveStep();}
 function prevMove(){if(solveStep<=0)return;undoMoveOnState(solution[solveStep-1]);solveStep--;showSolveStep();}
