@@ -2,8 +2,7 @@
 <html lang="zh-TW"><head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes"><meta name="theme-color" content="#000">
-<link rel="manifest" href="manifest.json">
-<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.json"><link rel="apple-touch-icon" href="apple-touch-icon.png">
 <title>魔方小老師 CFOP</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&display=swap');
@@ -50,7 +49,7 @@ canvas#ov{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:n
  <div style="font-size:48px;margin-bottom:8px">🧊</div>
  <div style="font-size:24px;font-weight:900;color:#FFD700">魔方小老師</div>
  <div style="font-size:15px;font-weight:800;color:#00D2FF;margin-top:2px">CFOP v3 速解法</div>
- <div style="font-size:13px;color:rgba(255,255,255,.5);margin-top:10px;max-width:280px;text-align:center;line-height:1.6">📸 拍攝6面 → 🧩 CFOP四步教學 · 平均72步<br>全程白色朝上！適合初學者</div>
+ <div style="font-size:13px;color:rgba(255,255,255,.5);margin-top:10px;max-width:280px;text-align:center;line-height:1.6">📸 拍攝6面 → 🧩 CFOP 速解 · 平均72步<br>全程白色朝上！適合初學者</div>
  <button class="btn" style="margin-top:20px;font-size:18px;padding:16px 40px" onclick="startApp()">📸 開始掃描</button>
  <button class="btn btn-sm" style="margin-top:10px;background:rgba(255,255,255,.12);color:#ccc" onclick="startManual()">✏️ 手動輸入顏色</button>
 </div>
@@ -1115,7 +1114,7 @@ _lbl.cfopEngine = function(init) {
   var s = _lbl.clone(init), script = [], mc = 0;
   function recOnly(stage, explain, moves) {
     if (!moves || !moves.length) return;
-    script.push({stage: stage, explain: explain, moves: moves}); mc += moves.length;
+    var opt=optimizeMoves(moves);if(!opt.length)return;script.push({stage:stage,explain:explain,moves:opt});mc+=opt.length;
   }
 
   // Cross (IDDFS)
@@ -1138,9 +1137,26 @@ _lbl.cfopEngine = function(init) {
   var rPLL = _lbl.solve1LookPLL(s);
   if (rPLL) rPLL.steps.forEach(function(st) { recOnly('PLL', st.explain, st.moves); });
 
-  // Peephole: count optimized total
-  var allM=[]; script.forEach(function(st){allM=allM.concat(st.moves);});
-  mc=optimizeMoves(allM).length;
+  // Peephole: optimize across stage boundaries (D D' → [], R R' → [], etc.)
+  var allM=[],bounds=[];
+  script.forEach(function(st){bounds.push({stage:st.stage,explain:st.explain,start:allM.length});allM=allM.concat(st.moves);bounds[bounds.length-1].end=allM.length;});
+  var opt=optimizeMoves(allM);
+  // Rebuild script with optimized moves
+  if(opt.length<allM.length){
+    var newScript=[],pos=0;
+    for(var bi=0;bi<bounds.length;bi++){
+      var b=bounds[bi];
+      var origLen=b.end-b.start;
+      var ratio=origLen/Math.max(allM.length,1);
+      var newEnd=Math.min(Math.round(pos+ratio*opt.length),opt.length);
+      if(bi===bounds.length-1)newEnd=opt.length;
+      var chunk=opt.slice(pos,newEnd);
+      if(chunk.length>0)newScript.push({stage:b.stage,explain:b.explain,moves:chunk});
+      pos=newEnd;
+    }
+    script=newScript;
+  }
+  mc=opt.length;
 
   return { script: script, mc: mc, state: s };
 };
@@ -1256,7 +1272,7 @@ _lbl.solve1LookPLL = function(state) {
 // ===== INTEGRATION: faceColors → LBL Engine → UI =====
 const STAGE_NAMES={Cross:'Cross 白色十字 ✚',F2L:'F2L 配對插入 🔲',OLL:'OLL 黃色全面 ☀️',PLL:'PLL 完美排列 🎯'};
 const STAGE_COLORS={Cross:'#FFFFFF',F2L:'#00D2FF',OLL:'#FFD500',PLL:'#FFD500'};
-const STAGE_TIPS={Cross:'🌟 IDDFS找到最短十字路徑！',F2L:'🔧 踢出→配對→插入，一次搞定角塊＋邊塊！',OLL:'☀️ 讓底面全部變成黃色！',PLL:'🎯 一個公式，直接完成！'};
+const STAGE_TIPS={Cross:'🌟 IDDFS找到最短十字路徑！',F2L:'🔧 踢出→配對→插入！',OLL:'☀️ 讓底面全部變成黃色！',PLL:'🎯 一個公式，直接完成！'};
 
 function doLBLSolve(){
   // Stop camera
@@ -1269,7 +1285,7 @@ function doLBLSolve(){
   document.getElementById('botBar').style.display='none';
   
   // Show computing overlay
-  document.getElementById('info').textContent='🧩 CFOP v3 引擎計算中...';
+  document.getElementById('info').textContent='🧩 CFOP v3 計算中...';
   
   // Run engine
   setTimeout(function(){
