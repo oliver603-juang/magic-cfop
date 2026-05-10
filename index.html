@@ -31,6 +31,7 @@ canvas#ov{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:n
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes pulse{0%{transform:scale(1);opacity:0}50%{transform:scale(1.3);opacity:1}100%{transform:scale(1);opacity:1}}
 @keyframes confetti-fall{0%{transform:translateY(0) rotate(0deg);opacity:1}100%{transform:translateY(100vh) rotate(720deg);opacity:0}}
+@keyframes x2pulse{0%,100%{box-shadow:0 0 8px rgba(255,215,0,.4)}50%{box-shadow:0 0 20px rgba(255,215,0,.9)}}
 </style></head><body>
 <div class="wrap">
 <video id="vid" autoplay playsinline muted></video><canvas id="ov"></canvas>
@@ -1735,15 +1736,23 @@ function showSolveStep(){
     arrowEl.innerHTML=miniArrowSVG(mv);
     arrowEl.style.position='relative';
     arrowEl.style.overflow='hidden';
-    // Add "2" watermark for x2 moves
+    // Add "2" watermark + yellow warning border for x2 moves
     var dbl=mv.indexOf('2')>=0;
     var oldWm=arrowEl.querySelector('.x2wm');if(oldWm)oldWm.remove();
+    var oldBadge=arrowEl.querySelector('.x2badge');if(oldBadge)oldBadge.remove();
     if(dbl){
-      var wm=document.createElement('span');
-      wm.className='x2wm';
-      wm.textContent='2';
-      wm.style.cssText='position:absolute;right:5%;top:3%;font-size:42px;font-weight:900;color:rgba(255,215,0,.75);font-family:monospace;line-height:1;pointer-events:none;text-shadow:1px 1px 3px rgba(0,0,0,.7)';
-      arrowEl.appendChild(wm);
+      arrowEl.style.border='3px solid #FFD700';
+      arrowEl.style.borderRadius='10px';
+      arrowEl.style.animation='x2pulse 0.8s ease-in-out infinite';
+      // "×2" badge top-right
+      var badge=document.createElement('div');
+      badge.className='x2badge';
+      badge.innerHTML='×2';
+      badge.style.cssText='position:absolute;right:-2px;top:-2px;background:#FFD700;color:#000;font-size:18px;font-weight:900;font-family:monospace;padding:2px 7px;border-radius:0 8px 0 8px;line-height:1.2;pointer-events:none;z-index:2';
+      arrowEl.appendChild(badge);
+    }else{
+      arrowEl.style.border='none';
+      arrowEl.style.animation='';
     }
   }
   var ml2=document.getElementById('sMoveLabel');if(ml2)ml2.style.display='none';
