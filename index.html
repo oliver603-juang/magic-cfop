@@ -36,16 +36,21 @@ canvas#ov{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:n
 <video id="vid" autoplay playsinline muted></video><canvas id="ov"></canvas>
 <div class="top-bar" id="topBar"><div class="top-title" id="title">🧊 魔方小老師</div><div class="top-sub" id="sub"></div><div class="top-dots" id="dots"></div></div>
 <div class="bot-bar" id="botBar" style="display:none"><div class="info" id="info"></div><div class="mgrid" id="mgrid" style="display:none"></div><div class="btn-row" id="btnRow"></div></div>
-<div id="solveUI" onclick="var x=event.clientX;var w=window.innerWidth;if(x>w*0.6)nextMove();else if(x<w*0.4)prevMove();" style="display:none;cursor:pointer;position:absolute;inset:0;z-index:10;background:#000;flex-direction:column;align-items:center;justify-content:space-between;padding:10px 16px 16px;overflow-y:auto">
- <div style="text-align:center;width:100%"><div id="stageLabel" style="margin-bottom:2px"></div><div style="font-size:11px;color:rgba(255,255,255,.4)">操作前（前紅面）</div><div class="mgrid" id="beforeGrid" style="display:grid;margin:4px auto"></div></div>
- <div style="text-align:center;width:100%;flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center">
-  <div style="font-size:36px;font-weight:900;color:#FFD700;font-family:'Courier New',monospace" id="sMoveLabel">-</div>
-  <div style="font-size:15px;color:#eee;margin-top:2px" id="sMoveDesc">-</div>
-  <div style="font-size:11px;color:rgba(255,255,255,.4);margin-top:4px" id="sMoveProg">-</div>
-  <div id="formulaStrip" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:3px;justify-content:center;max-width:320px"></div>
-  <div id="sMoveVis" style="margin-top:10px"></div>
+<div id="solveUI" onclick="var x=event.clientX;var w=window.innerWidth;if(x>w*0.5)nextMove();else prevMove();" style="display:none;cursor:pointer;position:absolute;inset:0;z-index:10;background:#000;flex-direction:column;overflow:hidden">
+ <div style="flex-shrink:0;padding:2px 6px;text-align:center">
+  <div id="stageLabel"></div>
+  <div style="display:flex;align-items:center;justify-content:center;gap:6px;margin:2px 0">
+   <div style="text-align:center"><div style="font-size:7px;color:rgba(255,255,255,.25)">操作前</div><div class="mgrid" id="beforeGrid" style="display:grid;width:48px;grid-template-columns:repeat(3,1fr);gap:1px;margin:1px auto"></div></div>
+   <div style="text-align:center;min-width:45px"><div style="font-size:26px;font-weight:900;color:#FFD700;font-family:monospace;line-height:1" id="sMoveLabel">-</div><div style="font-size:9px;color:#ddd" id="sMoveDesc">-</div></div>
+  </div>
+  <div id="formulaStrip" style="display:flex;flex-wrap:wrap;gap:2px;justify-content:center;max-width:340px;margin:2px auto"></div>
+  <div style="font-size:8px;color:rgba(255,255,255,.3)" id="sMoveProg"></div>
  </div>
- <div style="text-align:center;width:100%"><div style="font-size:11px;color:rgba(255,255,255,.4)">操作後</div><div class="mgrid" id="afterGrid" style="display:grid;margin:4px auto"></div><div class="btn-row" id="sBtnRow" style="margin-top:8px"></div></div>
+ <div style="flex:1;min-height:0;display:flex;align-items:center;justify-content:center;border-top:1px solid rgba(255,255,255,.06);padding:2px">
+  <div id="afterGrid" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center"></div>
+ </div>
+ <div id="sBtnRow" style="display:none"></div>
+ <div id="sMoveVis" style="display:none"></div>
 </div>
 <div class="overlay show" id="startOv">
  <div style="font-size:48px;margin-bottom:8px">🧊</div>
@@ -1358,7 +1363,7 @@ function showConfetti(){var c=document.createElement('div');c.style.cssText='pos
 
 function showGridIn(id,colors,highlights){
   var el=document.getElementById(id);el.style.display='grid';el.style.width='78px';el.style.gridTemplateColumns='repeat(3,1fr)';el.style.gap='2px';el.style.margin='4px auto';
-  el.innerHTML=colors.map(function(c,i){var hl=highlights&&highlights[i];var border=hl?'2px solid #FFD700':'1px solid rgba(0,0,0,.2)';var opacity=highlights?(hl?'1':'.35'):'1';var shadow=hl?'box-shadow:0 0 6px rgba(255,215,0,.6);':'';return'<div class="mcell" style="background:'+(CMAP[c]||'#333')+';border:'+border+';opacity:'+opacity+';'+shadow+'"></div>';}).join('');
+  el.innerHTML=colors.map(function(c,i){var hl=highlights&&highlights[i];var border=hl?'1px solid #FFD700':'1px solid rgba(0,0,0,.2)';var xmark=(highlights&&!hl)?'<svg style="position:absolute;inset:0;width:100%;height:100%" viewBox="0 0 20 20"><line x1="3" y1="3" x2="17" y2="17" stroke="rgba(0,0,0,.4)" stroke-width="1.2"/><line x1="17" y1="3" x2="3" y2="17" stroke="rgba(0,0,0,.4)" stroke-width="1.2"/></svg>':'';return'<div class="mcell" style="position:relative;background:'+(CMAP[c]||'#333')+';border:'+border+'">'+xmark+'</div>';}).join('');
 }
 
 function drawMoveDiagram(mv){
@@ -1419,6 +1424,26 @@ function showSolveStep(){
   applyMove(mv);var afterF=cubeState.F.slice();undoMoveOnState(mv);
   var diffF=beforeF.map(function(c,i){return c!==afterF[i];});
   showGridIn('afterGrid',afterF,diffF);
+  // === 6-Face T-Shape Unfolded View ===
+  (function(){
+    var bS2={},aS2={};['U','R','F','D','L','B'].forEach(function(f){bS2[f]=cubeState[f].slice();});
+    applyMove(mv);['U','R','F','D','L','B'].forEach(function(f){aS2[f]=cubeState[f].slice();});undoMoveOnState(mv);
+    var container=document.getElementById('afterGrid');
+    if(!container)return;
+    var cH=container.getBoundingClientRect().height;var cW=container.getBoundingClientRect().width;
+    if(cH<50)return; // not visible yet
+    var cs=23,fW=cs*3,g=1;
+    var pos={U:{x:fW+g,y:8},L:{x:0,y:fW+g+8},F:{x:fW+g,y:fW+g+8},R:{x:(fW+g)*2,y:fW+g+8},B:{x:fW+g,y:(fW+g)*2+8},D:{x:fW+g,y:(fW+g)*3+8}};
+    var tW=(fW+g)*3,tH=(fW+g)*4+10;
+    var sc=Math.min(cW/tW,cH/tH,1.25);
+    var dW=Math.floor(tW*sc),dH=Math.floor(tH*sc);
+    var df={};['U','L','F','R','B','D'].forEach(function(f){df[f]=[];for(var i=0;i<9;i++)df[f].push(bS2[f][i]!==aS2[f][i]);});
+    var lb={U:'上',L:'左',F:'前',R:'右',B:'後',D:'下'};
+    function rf(fc,hl,ox,oy,sz){var h='';for(var r=0;r<3;r++)for(var c=0;c<3;c++){var idx=r*3+c,bg=CMAP[fc[idx]]||'#333',x=ox+c*sz,y=oy+r*sz,isH=hl&&hl[idx];h+='<rect x="'+x+'" y="'+y+'" width="'+sz+'" height="'+sz+'" rx="2" fill="'+bg+'" stroke="'+(isH?'#FFD700':'rgba(0,0,0,.25)')+'" stroke-width="'+(isH?1:0.5)+'"/>';if(hl&&!isH){h+='<line x1="'+(x+3)+'" y1="'+(y+3)+'" x2="'+(x+sz-3)+'" y2="'+(y+sz-3)+'" stroke="rgba(0,0,0,.35)" stroke-width="1"/><line x1="'+(x+sz-3)+'" y1="'+(y+3)+'" x2="'+(x+3)+'" y2="'+(y+sz-3)+'" stroke="rgba(0,0,0,.35)" stroke-width="1"/>';}if(isH){h+='<text x="'+(x+sz/2)+'" y="'+(y+sz/2+1)+'" text-anchor="middle" dominant-baseline="central" font-size="'+(sz*0.35)+'" fill="rgba(0,0,0,.4)">★</text>';}}return h;}
+    var svg='<svg viewBox="0 0 '+tW+' '+tH+'" width="'+dW+'" height="'+dH+'" style="display:block;margin:0 auto">';
+    ['U','L','F','R','B','D'].forEach(function(f){var p=pos[f];svg+='<text x="'+(p.x+fW/2)+'" y="'+(p.y-1)+'" text-anchor="middle" font-size="7" fill="rgba(255,255,255,.4)">'+lb[f]+'</text>';svg+=rf(aS2[f],df[f],p.x,p.y,cs);});
+    svg+='</svg>';container.innerHTML=svg;
+  })();
   showGridIn('beforeGrid',beforeF,diffF);
   // Move info
   document.getElementById('sMoveLabel').textContent=mv;
@@ -1452,7 +1477,7 @@ function showSolveStep(){
   var tip=si&&STAGE_TIPS[si.stage]?'💡 '+STAGE_TIPS[si.stage]:'';
   // Add touch hint
   tip+='<br><span style="color:rgba(255,255,255,.3);font-size:9px">👆 右側點擊下一步 | 左側點擊上一步</span>';
-  document.getElementById('sMoveProg').innerHTML='第 '+(solveStep+1)+' 步 / 共 '+solution.length+' 步'+(tip?'<br><span style="color:rgba(255,215,0,.6);font-size:10px">'+tip+'</span>':'');
+  document.getElementById('sMoveProg').innerHTML='第'+(solveStep+1)+'/'+solution.length;
   drawMoveDiagram(mv);
   // Buttons
   document.getElementById('sBtnRow').innerHTML='<button class="btn btn-sm" style="background:rgba(255,255,255,.15);color:#fff" onclick="prevMove()">← 上一步</button><button class="btn" onclick="nextMove()">'+(solveStep>=solution.length-1?'🎉 完成！':'下一步 ➡')+'</button>';
