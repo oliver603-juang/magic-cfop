@@ -42,6 +42,7 @@ canvas#ov{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:n
   <div style="font-size:36px;font-weight:900;color:#FFD700;font-family:'Courier New',monospace" id="sMoveLabel">-</div>
   <div style="font-size:15px;color:#eee;margin-top:2px" id="sMoveDesc">-</div>
   <div style="font-size:11px;color:rgba(255,255,255,.4);margin-top:4px" id="sMoveProg">-</div>
+  <div id="formulaStrip" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:3px;justify-content:center;max-width:320px"></div>
   <div id="sMoveVis" style="margin-top:10px"></div>
  </div>
  <div style="text-align:center;width:100%"><div style="font-size:11px;color:rgba(255,255,255,.4)">操作後</div><div class="mgrid" id="afterGrid" style="display:grid;margin:4px auto"></div><div class="btn-row" id="sBtnRow" style="margin-top:8px"></div></div>
@@ -1421,6 +1422,32 @@ function showSolveStep(){
   showGridIn('beforeGrid',beforeF,diffF);
   // Move info
   document.getElementById('sMoveLabel').textContent=mv;
+  // === Formula Strip: show all moves in current formula segment ===
+  var fStrip=document.getElementById('formulaStrip');
+  if(si&&window._lblStageMarkers){
+    var curMarkerIdx=-1;
+    for(var mi=0;mi<window._lblStageMarkers.length;mi++){
+      if(window._lblStageMarkers[mi].idx<=solveStep)curMarkerIdx=mi;else break;
+    }
+    if(curMarkerIdx>=0){
+      var fStart=window._lblStageMarkers[curMarkerIdx].idx;
+      var fEnd=(curMarkerIdx+1<window._lblStageMarkers.length)?window._lblStageMarkers[curMarkerIdx+1].idx:solution.length;
+      var fLen=fEnd-fStart;
+      var fPos=solveStep-fStart; // 0-based position within formula
+      var html2='<div style="font-size:10px;color:rgba(255,255,255,.4);width:100%;text-align:center;margin-bottom:2px">公式 (第'+(fPos+1)+'步/共'+fLen+'步)</div>';
+      for(var fi=fStart;fi<fEnd;fi++){
+        var isCur=(fi===solveStep);
+        var isDone=(fi<solveStep);
+        var bg=isCur?'#FFD700':isDone?'rgba(0,210,255,.25)':'rgba(255,255,255,.08)';
+        var col=isCur?'#000':isDone?'#00D2FF':'rgba(255,255,255,.5)';
+        var brd=isCur?'2px solid #FFD700':'1px solid rgba(255,255,255,.15)';
+        var weight=isCur?'800':'600';
+        var scale=isCur?'transform:scale(1.15);':'';
+        html2+='<span style="display:inline-block;padding:2px 5px;border-radius:4px;font-size:11px;font-family:monospace;font-weight:'+weight+';background:'+bg+';color:'+col+';border:'+brd+';'+scale+'">'+solution[fi]+'</span>';
+      }
+      fStrip.innerHTML=html2;
+    }else{fStrip.innerHTML='';}
+  }else{fStrip.innerHTML='';}
   document.getElementById('sMoveDesc').textContent=MDESC_KID[mv]||mv;
   var tip=si&&STAGE_TIPS[si.stage]?'💡 '+STAGE_TIPS[si.stage]:'';
   // Add touch hint
