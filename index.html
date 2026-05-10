@@ -41,7 +41,7 @@ canvas#ov{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:n
   <div id="stageLabel"></div>
   <div style="display:flex;align-items:center;justify-content:center;gap:6px;margin:2px 0">
    <div style="text-align:center"><div style="font-size:7px;color:rgba(255,255,255,.25)">操作前</div><div class="mgrid" id="beforeGrid" style="display:grid;width:48px;grid-template-columns:repeat(3,1fr);gap:1px;margin:1px auto"></div></div>
-   <div style="text-align:center;min-width:45px"><div style="font-size:26px;font-weight:900;color:#FFD700;font-family:monospace;line-height:1" id="sMoveLabel">-</div><div style="font-size:9px;color:#ddd" id="sMoveDesc">-</div></div>
+   <div style="text-align:center;min-width:45px"><div style="font-size:26px;font-weight:900;color:#FFD700;font-family:monospace;line-height:1" id="sMoveLabel">-</div><div style="font-size:9px;color:#ddd" id="sMoveDesc">-</div></div><div id="arrowDiagram" style="flex-shrink:0"></div>
   </div>
   <div id="formulaStrip" style="display:flex;flex-wrap:wrap;gap:2px;justify-content:center;max-width:340px;margin:2px auto"></div>
   <div style="font-size:8px;color:rgba(255,255,255,.3)" id="sMoveProg"></div>
@@ -1362,8 +1362,13 @@ function undoMoveOnState(mv){var f=mv[0],p=mv.indexOf("'")>0,d=mv.indexOf('2')>0
 function showConfetti(){var c=document.createElement('div');c.style.cssText='position:fixed;inset:0;z-index:999;pointer-events:none;overflow:hidden';var colors=['#FFD700','#00D2FF','#FF5800','#009B48','#B71234','#fff'];for(var i=0;i<40;i++){var p=document.createElement('div');var sz=6+Math.random()*8;p.style.cssText='position:absolute;left:'+Math.random()*100+'%;top:-10px;width:'+sz+'px;height:'+sz+'px;background:'+colors[i%colors.length]+';border-radius:'+(Math.random()>.5?'50%':'2px')+';animation:confetti-fall '+(1+Math.random()*1.5)+'s '+(Math.random()*0.5)+'s ease-in forwards';c.appendChild(p);}document.body.appendChild(c);setTimeout(function(){c.remove();},3000);}
 
 function showGridIn(id,colors,highlights){
-  var el=document.getElementById(id);el.style.display='grid';el.style.width='78px';el.style.gridTemplateColumns='repeat(3,1fr)';el.style.gap='2px';el.style.margin='4px auto';
-  el.innerHTML=colors.map(function(c,i){var hl=highlights&&highlights[i];var border=hl?'1px solid #FFD700':'1px solid rgba(0,0,0,.2)';var xmark=(highlights&&!hl)?'<svg style="position:absolute;inset:0;width:100%;height:100%" viewBox="0 0 20 20"><line x1="3" y1="3" x2="17" y2="17" stroke="rgba(0,0,0,.4)" stroke-width="1.2"/><line x1="17" y1="3" x2="3" y2="17" stroke="rgba(0,0,0,.4)" stroke-width="1.2"/></svg>':'';return'<div class="mcell" style="position:relative;background:'+(CMAP[c]||'#333')+';border:'+border+'">'+xmark+'</div>';}).join('');
+  var el=document.getElementById(id);if(!el)return;
+  el.style.display='grid';el.style.gridTemplateColumns='repeat(3,1fr)';el.style.gap='1px';
+  el.innerHTML=colors.map(function(c,i){var hl=highlights&&highlights[i];var bg=CMAP[c]||'#333';
+    var shadow=hl?'box-shadow:inset 3px 3px 5px rgba(0,0,0,.5),inset -2px -2px 3px rgba(255,255,255,.3);':'';
+    var xmark=(highlights&&!hl)?'<svg style="position:absolute;inset:0;width:100%;height:100%" viewBox="0 0 20 20"><line x1="3" y1="3" x2="17" y2="17" stroke="rgba(0,0,0,.4)" stroke-width="1.2"/><line x1="17" y1="3" x2="3" y2="17" stroke="rgba(0,0,0,.4)" stroke-width="1.2"/></svg>':'';
+    return'<div class="mcell" style="position:relative;aspect-ratio:1;background:'+bg+';border:1px solid rgba(0,0,0,.15);'+shadow+'">'+xmark+'</div>';
+  }).join('');
 }
 
 function drawMoveDiagram(mv){
@@ -1407,6 +1412,99 @@ function kidExplain(stage, explain) {
 }
 var _lastStage = null;
 
+
+// === Mini Arrow SVG with move letter in center ===
+function miniArrowSVG(mv) {
+  var face=mv[0],prime=mv.indexOf("'")>=0,dbl=mv.indexOf('2')>=0;
+  if(face==='B'){
+    var w=100,h=80;var svg='<svg viewBox="0 0 '+w+' '+h+'" width="'+w+'" height="'+h+'">';
+    var fx=4,fy=10,fs=42,fcs=fs/3;
+    for(var r=0;r<3;r++)for(var c=0;c<3;c++)svg+='<rect x="'+(fx+c*fcs)+'" y="'+(fy+r*fcs)+'" width="'+(fcs-1)+'" height="'+(fcs-1)+'" rx="1" fill="rgba(255,255,255,.06)" stroke="rgba(255,255,255,.15)" stroke-width="0.5"/>';
+    var rx=fx+fs+2,rw=22,rsk=5;
+    for(var r2=0;r2<3;r2++)for(var c2=0;c2<3;c2++){var x2=rx+c2*(rw/3),y2=fy+r2*fcs+c2*rsk;svg+='<rect x="'+x2+'" y="'+y2+'" width="'+(rw/3-1)+'" height="'+(fcs-1)+'" rx="1" fill="rgba(255,215,0,.12)" stroke="rgba(255,215,0,.25)" stroke-width="0.5" transform="skewY('+rsk+')"/>';}
+    svg+='<text x="'+(rx+rw/2)+'" y="'+(fy+fs/2+rsk*1.5)+'" text-anchor="middle" dominant-baseline="central" font-size="16" font-weight="900" fill="#FFD700" font-family="monospace">'+mv+'</text>';
+    var ax=rx+rw+8,ay=fy+fs/2+rsk,d2=prime?14:-14;
+    svg+='<line x1="'+ax+'" y1="'+(ay-d2)+'" x2="'+ax+'" y2="'+(ay+d2)+'" stroke="#FFD700" stroke-width="1.5"/>';
+    svg+='<polygon points="'+ax+','+(ay+d2+(d2>0?4:-4))+' '+(ax-3)+','+(ay+d2)+' '+(ax+3)+','+(ay+d2)+'" fill="#FFD700"/>';
+    svg+='<text x="'+(w/2)+'" y="'+(h-2)+'" text-anchor="middle" font-size="8" fill="rgba(255,255,255,.5)">'+(MDESC_KID[mv]||mv)+'</text>';
+    svg+='</svg>';return svg;
+  }
+  var sz=72,cs=sz/3,pad=12,tw=sz+pad*2,th=sz+pad*2+10;
+  var svg2='<svg viewBox="0 0 '+tw+' '+th+'" width="'+tw+'" height="'+th+'">';
+  var ox=pad,oy=pad;
+  for(var r3=0;r3<3;r3++)for(var c3=0;c3<3;c3++)svg2+='<rect x="'+(ox+c3*cs+0.5)+'" y="'+(oy+r3*cs+0.5)+'" width="'+(cs-1)+'" height="'+(cs-1)+'" rx="1.5" fill="rgba(255,255,255,.06)" stroke="rgba(255,255,255,.15)" stroke-width="0.5"/>';
+  svg2+='<text x="'+(ox+cs*1.5)+'" y="'+(oy+cs*1.5+1)+'" text-anchor="middle" dominant-baseline="central" font-size="20" font-weight="900" fill="#FFD700" font-family="monospace">'+mv+'</text>';
+  svg2+='<text x="'+(tw/2)+'" y="'+(oy+sz+10)+'" text-anchor="middle" font-size="8" fill="rgba(255,255,255,.5)">'+(MDESC_KID[mv]||mv)+'</text>';
+  var hl3='rgba(255,215,0,.1)',hlS='rgba(255,215,0,.3)';
+  switch(face){
+    case'R':svg2+='<rect x="'+(ox+cs*2)+'" y="'+oy+'" width="'+cs+'" height="'+sz+'" rx="2" fill="'+hl3+'" stroke="'+hlS+'" stroke-width="0.5"/>';var ay=prime?oy+sz+7:oy-7;svg2+='<line x1="'+(ox+cs*2.5)+'" y1="'+(prime?oy+sz+1:oy-1)+'" x2="'+(ox+cs*2.5)+'" y2="'+ay+'" stroke="#FFD700" stroke-width="1.5"/>';svg2+='<polygon points="'+(ox+cs*2.5)+','+(ay+(prime?3:-3))+' '+(ox+cs*2.5-3)+','+ay+' '+(ox+cs*2.5+3)+','+ay+'" fill="#FFD700"/>';break;
+    case'L':svg2+='<rect x="'+ox+'" y="'+oy+'" width="'+cs+'" height="'+sz+'" rx="2" fill="'+hl3+'" stroke="'+hlS+'" stroke-width="0.5"/>';var ay2=prime?oy-7:oy+sz+7;svg2+='<line x1="'+(ox+cs*0.5)+'" y1="'+(prime?oy-1:oy+sz+1)+'" x2="'+(ox+cs*0.5)+'" y2="'+ay2+'" stroke="#FFD700" stroke-width="1.5"/>';svg2+='<polygon points="'+(ox+cs*0.5)+','+(ay2+(prime?-3:3))+' '+(ox+cs*0.5-3)+','+ay2+' '+(ox+cs*0.5+3)+','+ay2+'" fill="#FFD700"/>';break;
+    case'U':svg2+='<rect x="'+ox+'" y="'+oy+'" width="'+sz+'" height="'+cs+'" rx="2" fill="'+hl3+'" stroke="'+hlS+'" stroke-width="0.5"/>';var ax3=prime?ox+sz+7:ox-7;svg2+='<line x1="'+(prime?ox+sz+1:ox-1)+'" y1="'+(oy+cs*0.5)+'" x2="'+ax3+'" y2="'+(oy+cs*0.5)+'" stroke="#FFD700" stroke-width="1.5"/>';svg2+='<polygon points="'+(ax3+(prime?3:-3))+','+(oy+cs*0.5)+' '+ax3+','+(oy+cs*0.5-3)+' '+ax3+','+(oy+cs*0.5+3)+'" fill="#FFD700"/>';break;
+    case'D':svg2+='<rect x="'+ox+'" y="'+(oy+cs*2)+'" width="'+sz+'" height="'+cs+'" rx="2" fill="'+hl3+'" stroke="'+hlS+'" stroke-width="0.5"/>';var ax4=prime?ox-7:ox+sz+7;svg2+='<line x1="'+(prime?ox-1:ox+sz+1)+'" y1="'+(oy+cs*2.5)+'" x2="'+ax4+'" y2="'+(oy+cs*2.5)+'" stroke="#FFD700" stroke-width="1.5"/>';svg2+='<polygon points="'+(ax4+(prime?-3:3))+','+(oy+cs*2.5)+' '+ax4+','+(oy+cs*2.5-3)+' '+ax4+','+(oy+cs*2.5+3)+'" fill="#FFD700"/>';break;
+    case'F':svg2+='<rect x="'+ox+'" y="'+oy+'" width="'+sz+'" height="'+sz+'" rx="3" fill="'+hl3+'" stroke="'+hlS+'" stroke-width="0.5"/>';if(!prime){svg2+='<path d="M'+(ox+sz-6)+','+(oy+6)+' A'+(sz/2-8)+','+(sz/2-8)+' 0 1,1 '+(ox+6)+','+(oy+sz-6)+'" fill="none" stroke="#FFD700" stroke-width="1.2"/>';svg2+='<polygon points="'+(ox+6)+','+(oy+sz-6)+' '+(ox+10)+','+(oy+sz-10)+' '+(ox+2)+','+(oy+sz-10)+'" fill="#FFD700"/>';}else{svg2+='<path d="M'+(ox+6)+','+(oy+6)+' A'+(sz/2-8)+','+(sz/2-8)+' 0 1,0 '+(ox+sz-6)+','+(oy+sz-6)+'" fill="none" stroke="#FFD700" stroke-width="1.2"/>';svg2+='<polygon points="'+(ox+sz-6)+','+(oy+sz-6)+' '+(ox+sz-10)+','+(oy+sz-10)+' '+(ox+sz-2)+','+(oy+sz-10)+'" fill="#FFD700"/>';}break;
+  }
+  svg2+='</svg>';return svg2;
+}
+
+// === 6-Face renderFace for T-shape unfolded view ===
+function renderFace6(fc,hl,ox,oy,sz){
+  var h='';for(var r=0;r<3;r++)for(var c=0;c<3;c++){var idx=r*3+c,bg=CMAP[fc[idx]]||'#333',x=ox+c*sz,y=oy+r*sz,isH=hl&&hl[idx];
+  h+='<rect x="'+x+'" y="'+y+'" width="'+sz+'" height="'+sz+'" rx="2" fill="'+bg+'" stroke="'+(isH?'#FFD700':'rgba(0,0,0,.25)')+'" stroke-width="'+(isH?1:0.5)+'"/>';
+  if(hl&&!isH){h+='<line x1="'+(x+3)+'" y1="'+(y+3)+'" x2="'+(x+sz-3)+'" y2="'+(y+sz-3)+'" stroke="rgba(0,0,0,.35)" stroke-width="1"/><line x1="'+(x+sz-3)+'" y1="'+(y+3)+'" x2="'+(x+3)+'" y2="'+(y+sz-3)+'" stroke="rgba(0,0,0,.35)" stroke-width="1"/>';}
+  if(isH)h+='<text x="'+(x+sz/2)+'" y="'+(y+sz/2+1)+'" text-anchor="middle" dominant-baseline="central" font-size="'+(sz*.35)+'" fill="rgba(0,0,0,.4)">★</text>';}
+  return h;
+}
+
+
+// === MOVE_AFFECTED: structural positions affected per move ===
+var MOVE_AFFECTED={
+  U:{U:[0,1,2,3,5,6,7,8],F:[0,1,2],R:[0,1,2],B:[0,1,2],L:[0,1,2]},
+  D:{D:[0,1,2,3,5,6,7,8],F:[6,7,8],R:[6,7,8],B:[6,7,8],L:[6,7,8]},
+  R:{R:[0,1,2,3,5,6,7,8],U:[2,5,8],F:[2,5,8],D:[2,5,8],B:[0,3,6]},
+  L:{L:[0,1,2,3,5,6,7,8],U:[0,3,6],F:[0,3,6],D:[0,3,6],B:[2,5,8]},
+  F:{F:[0,1,2,3,5,6,7,8],U:[6,7,8],R:[0,3,6],D:[0,1,2],L:[2,5,8]},
+  B:{B:[0,1,2,3,5,6,7,8],U:[0,1,2],R:[2,5,8],D:[6,7,8],L:[0,3,6]}
+};
+
+// === renderFace6: morandi gray inset shadow for affected cells, X for unaffected ===
+function renderFace6(fc,hl,ox,oy,sz){
+  var h='';for(var r=0;r<3;r++)for(var c=0;c<3;c++){var idx=r*3+c,bg=CMAP[fc[idx]]||'#333',x=ox+c*sz,y=oy+r*sz,isH=hl&&hl[idx];
+  h+='<rect x="'+x+'" y="'+y+'" width="'+sz+'" height="'+sz+'" rx="2" fill="'+bg+'" stroke="rgba(0,0,0,.15)" stroke-width="0.5"/>';
+  if(isH){h+='<rect x="'+x+'" y="'+y+'" width="'+sz+'" height="3" fill="rgba(0,0,0,.45)"/><rect x="'+x+'" y="'+y+'" width="3" height="'+sz+'" fill="rgba(0,0,0,.45)"/><rect x="'+x+'" y="'+(y+sz-3)+'" width="'+sz+'" height="3" fill="rgba(255,255,255,.35)"/><rect x="'+(x+sz-3)+'" y="'+y+'" width="3" height="'+sz+'" fill="rgba(255,255,255,.35)"/><rect x="'+(x+1)+'" y="'+(y+1)+'" width="'+(sz-2)+'" height="'+(sz-2)+'" rx="1" fill="rgba(0,0,0,.1)"/>';}
+  if(hl&&!isH){h+='<line x1="'+(x+3)+'" y1="'+(y+3)+'" x2="'+(x+sz-3)+'" y2="'+(y+sz-3)+'" stroke="rgba(0,0,0,.35)" stroke-width="1"/><line x1="'+(x+sz-3)+'" y1="'+(y+3)+'" x2="'+(x+3)+'" y2="'+(y+sz-3)+'" stroke="rgba(0,0,0,.35)" stroke-width="1"/>';}}
+  return h;
+}
+
+// === miniArrowSVG: arrow diagram with move letter in center, B=45deg ===
+function miniArrowSVG(mv){
+  var face=mv[0],prime=mv.indexOf("'")>=0;
+  if(face==='B'){
+    var w=100,h=80,svg='<svg viewBox="0 0 '+w+' '+h+'" width="'+w+'" height="'+h+'">';
+    var fx=4,fy=10,fs=42,fcs=fs/3;
+    for(var r=0;r<3;r++)for(var c=0;c<3;c++)svg+='<rect x="'+(fx+c*fcs)+'" y="'+(fy+r*fcs)+'" width="'+(fcs-1)+'" height="'+(fcs-1)+'" rx="1" fill="rgba(255,255,255,.06)" stroke="rgba(255,255,255,.15)" stroke-width="0.5"/>';
+    var rx=fx+fs+2,rw=22,rsk=5;
+    for(var r2=0;r2<3;r2++)for(var c2=0;c2<3;c2++){var x2=rx+c2*(rw/3),y2=fy+r2*fcs+c2*rsk;svg+='<rect x="'+x2+'" y="'+y2+'" width="'+(rw/3-1)+'" height="'+(fcs-1)+'" rx="1" fill="rgba(255,215,0,.12)" stroke="rgba(255,215,0,.25)" stroke-width="0.5" transform="skewY('+rsk+')"/>';}
+    svg+='<text x="'+(rx+rw/2)+'" y="'+(fy+fs/2+rsk*1.5)+'" text-anchor="middle" dominant-baseline="central" font-size="16" font-weight="900" fill="#FFD700" font-family="monospace">'+mv+'</text>';
+    var ax=rx+rw+8,ay=fy+fs/2+rsk,d2=prime?14:-14;
+    svg+='<line x1="'+ax+'" y1="'+(ay-d2)+'" x2="'+ax+'" y2="'+(ay+d2)+'" stroke="#FFD700" stroke-width="1.5"/><polygon points="'+ax+','+(ay+d2+(d2>0?4:-4))+' '+(ax-3)+','+(ay+d2)+' '+(ax+3)+','+(ay+d2)+'" fill="#FFD700"/>';
+    svg+='<text x="'+(w/2)+'" y="'+(h-2)+'" text-anchor="middle" font-size="8" fill="rgba(255,255,255,.5)">'+(MDESC_KID[mv]||mv)+'</text></svg>';return svg;
+  }
+  var sz=72,cs=sz/3,pad=12,tw=sz+pad*2,th=sz+pad*2+12;
+  var svg2='<svg viewBox="0 0 '+tw+' '+th+'" width="'+tw+'" height="'+th+'">';var ox=pad,oy=pad;
+  for(var r3=0;r3<3;r3++)for(var c3=0;c3<3;c3++)svg2+='<rect x="'+(ox+c3*cs+.5)+'" y="'+(oy+r3*cs+.5)+'" width="'+(cs-1)+'" height="'+(cs-1)+'" rx="1.5" fill="rgba(255,255,255,.06)" stroke="rgba(255,255,255,.15)" stroke-width="0.5"/>';
+  svg2+='<text x="'+(ox+cs*1.5)+'" y="'+(oy+cs*1.5+1)+'" text-anchor="middle" dominant-baseline="central" font-size="20" font-weight="900" fill="#FFD700" font-family="monospace">'+mv+'</text>';
+  svg2+='<text x="'+(tw/2)+'" y="'+(oy+sz+11)+'" text-anchor="middle" font-size="8" fill="rgba(255,255,255,.5)">'+(MDESC_KID[mv]||mv)+'</text>';
+  var hl3='rgba(255,215,0,.1)',hlS='rgba(255,215,0,.3)';
+  switch(face){
+    case'R':svg2+='<rect x="'+(ox+cs*2)+'" y="'+oy+'" width="'+cs+'" height="'+sz+'" rx="2" fill="'+hl3+'" stroke="'+hlS+'"/>';var ay=prime?oy+sz+7:oy-7;svg2+='<line x1="'+(ox+cs*2.5)+'" y1="'+(prime?oy+sz+1:oy-1)+'" x2="'+(ox+cs*2.5)+'" y2="'+ay+'" stroke="#FFD700" stroke-width="1.5"/><polygon points="'+(ox+cs*2.5)+','+(ay+(prime?3:-3))+' '+(ox+cs*2.5-3)+','+ay+' '+(ox+cs*2.5+3)+','+ay+'" fill="#FFD700"/>';break;
+    case'L':svg2+='<rect x="'+ox+'" y="'+oy+'" width="'+cs+'" height="'+sz+'" rx="2" fill="'+hl3+'" stroke="'+hlS+'"/>';var ay2=prime?oy-7:oy+sz+7;svg2+='<line x1="'+(ox+cs*.5)+'" y1="'+(prime?oy-1:oy+sz+1)+'" x2="'+(ox+cs*.5)+'" y2="'+ay2+'" stroke="#FFD700" stroke-width="1.5"/><polygon points="'+(ox+cs*.5)+','+(ay2+(prime?-3:3))+' '+(ox+cs*.5-3)+','+ay2+' '+(ox+cs*.5+3)+','+ay2+'" fill="#FFD700"/>';break;
+    case'U':svg2+='<rect x="'+ox+'" y="'+oy+'" width="'+sz+'" height="'+cs+'" rx="2" fill="'+hl3+'" stroke="'+hlS+'"/>';var ax3=prime?ox+sz+7:ox-7;svg2+='<line x1="'+(prime?ox+sz+1:ox-1)+'" y1="'+(oy+cs*.5)+'" x2="'+ax3+'" y2="'+(oy+cs*.5)+'" stroke="#FFD700" stroke-width="1.5"/><polygon points="'+(ax3+(prime?3:-3))+','+(oy+cs*.5)+' '+ax3+','+(oy+cs*.5-3)+' '+ax3+','+(oy+cs*.5+3)+'" fill="#FFD700"/>';break;
+    case'D':svg2+='<rect x="'+ox+'" y="'+(oy+cs*2)+'" width="'+sz+'" height="'+cs+'" rx="2" fill="'+hl3+'" stroke="'+hlS+'"/>';var ax4=prime?ox-7:ox+sz+7;svg2+='<line x1="'+(prime?ox-1:ox+sz+1)+'" y1="'+(oy+cs*2.5)+'" x2="'+ax4+'" y2="'+(oy+cs*2.5)+'" stroke="#FFD700" stroke-width="1.5"/><polygon points="'+(ax4+(prime?-3:3))+','+(oy+cs*2.5)+' '+ax4+','+(oy+cs*2.5-3)+' '+ax4+','+(oy+cs*2.5+3)+'" fill="#FFD700"/>';break;
+    case'F':svg2+='<rect x="'+ox+'" y="'+oy+'" width="'+sz+'" height="'+sz+'" rx="3" fill="'+hl3+'" stroke="'+hlS+'"/>';if(!prime){svg2+='<path d="M'+(ox+sz-6)+','+(oy+6)+' A'+(sz/2-8)+','+(sz/2-8)+' 0 1,1 '+(ox+6)+','+(oy+sz-6)+'" fill="none" stroke="#FFD700" stroke-width="1.2"/><polygon points="'+(ox+6)+','+(oy+sz-6)+' '+(ox+10)+','+(oy+sz-10)+' '+(ox+2)+','+(oy+sz-10)+'" fill="#FFD700"/>';}else{svg2+='<path d="M'+(ox+6)+','+(oy+6)+' A'+(sz/2-8)+','+(sz/2-8)+' 0 1,0 '+(ox+sz-6)+','+(oy+sz-6)+'" fill="none" stroke="#FFD700" stroke-width="1.2"/><polygon points="'+(ox+sz-6)+','+(oy+sz-6)+' '+(ox+sz-10)+','+(oy+sz-10)+' '+(ox+sz-2)+','+(oy+sz-10)+'" fill="#FFD700"/>';}break;
+  }
+  svg2+='</svg>';return svg2;
+}
+
 function showSolveStep(){
   if(solveStep===-1){solveStep++;if(solveStep>0)applyMove(solution[solveStep-1]);}
   if(solveStep>=solution.length){showConfetti();document.getElementById('solveUI').style.display='none';document.getElementById('doneOv').classList.add('show');return;}
@@ -1439,7 +1537,7 @@ function showSolveStep(){
     var dW=Math.floor(tW*sc),dH=Math.floor(tH*sc);
     var df={};['U','L','F','R','B','D'].forEach(function(f){df[f]=[];for(var i=0;i<9;i++)df[f].push(bS2[f][i]!==aS2[f][i]);});
     var lb={U:'上',L:'左',F:'前',R:'右',B:'後',D:'下'};
-    function rf(fc,hl,ox,oy,sz){var h='';for(var r=0;r<3;r++)for(var c=0;c<3;c++){var idx=r*3+c,bg=CMAP[fc[idx]]||'#333',x=ox+c*sz,y=oy+r*sz,isH=hl&&hl[idx];h+='<rect x="'+x+'" y="'+y+'" width="'+sz+'" height="'+sz+'" rx="2" fill="'+bg+'" stroke="'+(isH?'#FFD700':'rgba(0,0,0,.25)')+'" stroke-width="'+(isH?1:0.5)+'"/>';if(hl&&!isH){h+='<line x1="'+(x+3)+'" y1="'+(y+3)+'" x2="'+(x+sz-3)+'" y2="'+(y+sz-3)+'" stroke="rgba(0,0,0,.35)" stroke-width="1"/><line x1="'+(x+sz-3)+'" y1="'+(y+3)+'" x2="'+(x+3)+'" y2="'+(y+sz-3)+'" stroke="rgba(0,0,0,.35)" stroke-width="1"/>';}if(isH){h+='<text x="'+(x+sz/2)+'" y="'+(y+sz/2+1)+'" text-anchor="middle" dominant-baseline="central" font-size="'+(sz*0.35)+'" fill="rgba(0,0,0,.4)">★</text>';}}return h;}
+    var rf=renderFace6;function _rf_unused(fc,hl,ox,oy,sz){var h='';for(var r=0;r<3;r++)for(var c=0;c<3;c++){var idx=r*3+c,bg=CMAP[fc[idx]]||'#333',x=ox+c*sz,y=oy+r*sz,isH=hl&&hl[idx];h+='<rect x="'+x+'" y="'+y+'" width="'+sz+'" height="'+sz+'" rx="2" fill="'+bg+'" stroke="'+(isH?'#FFD700':'rgba(0,0,0,.25)')+'" stroke-width="'+(isH?1:0.5)+'"/>';if(hl&&!isH){h+='<line x1="'+(x+3)+'" y1="'+(y+3)+'" x2="'+(x+sz-3)+'" y2="'+(y+sz-3)+'" stroke="rgba(0,0,0,.35)" stroke-width="1"/><line x1="'+(x+sz-3)+'" y1="'+(y+3)+'" x2="'+(x+3)+'" y2="'+(y+sz-3)+'" stroke="rgba(0,0,0,.35)" stroke-width="1"/>';}if(isH){h+='<text x="'+(x+sz/2)+'" y="'+(y+sz/2+1)+'" text-anchor="middle" dominant-baseline="central" font-size="'+(sz*0.35)+'" fill="rgba(0,0,0,.4)">★</text>';}}return h;}
     var svg='<svg viewBox="0 0 '+tW+' '+tH+'" width="'+dW+'" height="'+dH+'" style="display:block;margin:0 auto">';
     ['U','L','F','R','B','D'].forEach(function(f){var p=pos[f];svg+='<text x="'+(p.x+fW/2)+'" y="'+(p.y-1)+'" text-anchor="middle" font-size="7" fill="rgba(255,255,255,.4)">'+lb[f]+'</text>';svg+=rf(aS2[f],df[f],p.x,p.y,cs);});
     svg+='</svg>';container.innerHTML=svg;
@@ -1478,9 +1576,14 @@ function showSolveStep(){
   // Add touch hint
   tip+='<br><span style="color:rgba(255,255,255,.3);font-size:9px">👆 右側點擊下一步 | 左側點擊上一步</span>';
   document.getElementById('sMoveProg').innerHTML='第'+(solveStep+1)+'/'+solution.length;
-  drawMoveDiagram(mv);
+  // Arrow diagram with move letter in center
+  var arrowEl=document.getElementById('arrowDiagram');
+  if(arrowEl)arrowEl.innerHTML=miniArrowSVG(mv);
+  var ml2=document.getElementById('sMoveLabel');if(ml2)ml2.style.display='none';
+  var md2=document.getElementById('sMoveDesc');if(md2)md2.style.display='none';
   // Buttons
-  document.getElementById('sBtnRow').innerHTML='<button class="btn btn-sm" style="background:rgba(255,255,255,.15);color:#fff" onclick="prevMove()">← 上一步</button><button class="btn" onclick="nextMove()">'+(solveStep>=solution.length-1?'🎉 完成！':'下一步 ➡')+'</button>';
+  // buttons removed - touch navigation
+
 }
 function nextMove(){solveStep++;if(solveStep>0&&solveStep<=solution.length)applyMove(solution[solveStep-1]);showSolveStep();}
 function prevMove(){if(solveStep<=0)return;undoMoveOnState(solution[solveStep-1]);solveStep--;showSolveStep();}
