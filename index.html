@@ -1433,12 +1433,12 @@ var _lastStage = null;
 
 // === MOVE_AFFECTED: structural positions affected per move ===
 var MOVE_AFFECTED={
-  U:{U:[0,1,2,3,5,6,7,8],F:[0,1,2],R:[0,1,2],B:[0,1,2],L:[0,1,2]},
-  D:{D:[0,1,2,3,5,6,7,8],F:[6,7,8],R:[6,7,8],B:[6,7,8],L:[6,7,8]},
-  R:{R:[0,1,2,3,5,6,7,8],U:[2,5,8],F:[2,5,8],D:[2,5,8],B:[0,3,6]},
-  L:{L:[0,1,2,3,5,6,7,8],U:[0,3,6],F:[0,3,6],D:[0,3,6],B:[2,5,8]},
-  F:{F:[0,1,2,3,5,6,7,8],U:[6,7,8],R:[0,3,6],D:[0,1,2],L:[2,5,8]},
-  B:{B:[0,1,2,3,5,6,7,8],U:[0,1,2],R:[2,5,8],D:[6,7,8],L:[0,3,6]}
+  U:{U:[0,1,2,3,4,5,6,7,8],F:[0,1,2],R:[0,1,2],B:[0,1,2],L:[0,1,2]},
+  D:{D:[0,1,2,3,4,5,6,7,8],F:[6,7,8],R:[6,7,8],B:[6,7,8],L:[6,7,8]},
+  R:{R:[0,1,2,3,4,5,6,7,8],U:[2,5,8],F:[2,5,8],D:[2,5,8],B:[0,3,6]},
+  L:{L:[0,1,2,3,4,5,6,7,8],U:[0,3,6],F:[0,3,6],D:[0,3,6],B:[2,5,8]},
+  F:{F:[0,1,2,3,4,5,6,7,8],U:[6,7,8],R:[0,3,6],D:[0,1,2],L:[2,5,8]},
+  B:{B:[0,1,2,3,4,5,6,7,8],U:[0,1,2],R:[2,5,8],D:[6,7,8],L:[0,3,6]}
 };
 
 // === renderFace6: morandi gray inset shadow for affected cells, X for unaffected ===
@@ -1530,7 +1530,9 @@ function showSolveStep(){
   showGridIn('beforeGrid',beforeF);
   // Apply temporarily for after view
   applyMove(mv);var afterF=cubeState.F.slice();undoMoveOnState(mv);
-  var diffF=beforeF.map(function(c,i){return c!==afterF[i];});
+  // Use MOVE_AFFECTED structural mapping instead of color diff
+  var moveFace=mv[0];var affF=MOVE_AFFECTED[moveFace]&&MOVE_AFFECTED[moveFace].F?MOVE_AFFECTED[moveFace].F:[];
+  var diffF=beforeF.map(function(c,i){return affF.indexOf(i)>=0;});
   showGridIn('afterGrid',afterF,diffF);
   // === 6-Face T-Shape Unfolded View ===
   (function(){
@@ -1544,7 +1546,7 @@ function showSolveStep(){
     var pos={U:{x:fW+g,y:8},L:{x:0,y:fW+g+8},F:{x:fW+g,y:fW+g+8},R:{x:(fW+g)*2,y:fW+g+8},D:{x:fW+g,y:(fW+g)*2+8},B:{x:fW+g,y:(fW+g)*3+8}};
     var tW=(fW+g)*3,tH=(fW+g)*4+10;
     var dW=tW,dH=tH;
-    var df={};['U','L','F','R','D','B'].forEach(function(f){df[f]=[];for(var i=0;i<9;i++)df[f].push(bS2[f][i]!==aS2[f][i]);});
+    var df={};var mf=mv[0];['U','L','F','R','D','B'].forEach(function(f){var aff=MOVE_AFFECTED[mf]&&MOVE_AFFECTED[mf][f]?MOVE_AFFECTED[mf][f]:[];df[f]=[];for(var i=0;i<9;i++)df[f].push(aff.indexOf(i)>=0);});
     var lb={U:'上',L:'左',F:'前',R:'右',D:'下',B:'後'};
     var rf=renderFace6;
     var svg='<svg viewBox="0 0 '+tW+' '+tH+'" width="'+dW+'" height="'+dH+'" >';
@@ -1563,7 +1565,7 @@ function showSolveStep(){
     }
     // === Sync arrowImg: same fW ===
     var arImg=document.getElementById('arrowDiagram');
-    if(arImg){var img=arImg.querySelector('img');if(img){img.style.height=fW+'px';img.style.width=fW+'px';img.style.objectFit='contain';}}
+    if(arImg){arImg.style.width=fW+'px';arImg.style.height=fW+'px';var img=arImg.querySelector('img');if(img){img.style.width='100%';img.style.height='100%';img.style.objectFit='contain';}var wrap=arImg.querySelector('div');if(wrap){wrap.style.width='100%';wrap.style.height='100%';}}
   })();
   // Move info
   document.getElementById('sMoveLabel').textContent=mv;
