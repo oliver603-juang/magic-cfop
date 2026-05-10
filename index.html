@@ -31,7 +31,7 @@ canvas#ov{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:n
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes pulse{0%{transform:scale(1);opacity:0}50%{transform:scale(1.3);opacity:1}100%{transform:scale(1);opacity:1}}
 @keyframes confetti-fall{0%{transform:translateY(0) rotate(0deg);opacity:1}100%{transform:translateY(100vh) rotate(720deg);opacity:0}}
-@keyframes x2pulse{0%,100%{box-shadow:0 0 8px rgba(255,215,0,.4)}50%{box-shadow:0 0 20px rgba(255,215,0,.9)}}
+@keyframes x2pulse{0%,100%{box-shadow:0 0 16px rgba(255,0,0,.3)}50%{box-shadow:0 0 48px rgba(255,0,0,.95)}}
 </style></head><body>
 <div class="wrap">
 <video id="vid" autoplay playsinline muted></video><canvas id="ov"></canvas>
@@ -44,7 +44,7 @@ canvas#ov{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:n
    <div style="text-align:center"><div style="font-size:7px;color:rgba(255,255,255,.25)">操作前</div><div class="mgrid" id="beforeGrid" style="display:grid;width:48px;grid-template-columns:repeat(3,1fr);gap:1px;margin:1px auto"></div></div>
    <div style="text-align:center;min-width:45px"><div style="font-size:26px;font-weight:900;color:#FFD700;font-family:monospace;line-height:1" id="sMoveLabel">-</div><div style="font-size:9px;color:#ddd" id="sMoveDesc">-</div></div><div id="arrowDiagram" style="flex-shrink:0"></div>
   </div>
-  <div id="formulaStrip" style="display:flex;flex-wrap:wrap;gap:2px;justify-content:center;max-width:340px;margin:2px auto"></div>
+  <div id="formulaStrip" style="display:flex;flex-wrap:wrap;gap:4px;justify-content:center;max-width:480px;margin:2px auto"></div>
   <div style="font-size:8px;color:rgba(255,255,255,.3)" id="sMoveProg"></div>
  </div>
  <div style="flex:1;min-height:0;display:flex;align-items:center;justify-content:center;border-top:1px solid rgba(255,255,255,.06);padding:2px">
@@ -1711,7 +1711,7 @@ function showSolveStep(){
       var fEnd=(curMarkerIdx+1<window._lblStageMarkers.length)?window._lblStageMarkers[curMarkerIdx+1].idx:solution.length;
       var fLen=fEnd-fStart;
       var fPos=solveStep-fStart; // 0-based position within formula
-      var html2='<div style="font-size:10px;color:rgba(255,255,255,.4);width:100%;text-align:center;margin-bottom:2px">公式 (第'+(fPos+1)+'步/共'+fLen+'步)</div>';
+      var html2='<div style="font-size:14px;color:rgba(255,255,255,.4);width:100%;text-align:center;margin-bottom:4px">公式 (第'+(fPos+1)+'步/共'+fLen+'步)</div>';
       for(var fi=fStart;fi<fEnd;fi++){
         var isCur=(fi===solveStep);
         var isDone=(fi<solveStep);
@@ -1720,7 +1720,7 @@ function showSolveStep(){
         var brd=isCur?'2px solid #FFD700':'1px solid rgba(255,255,255,.15)';
         var weight=isCur?'800':'600';
         var scale=isCur?'transform:scale(1.15);':'';
-        html2+='<span style="display:inline-block;padding:2px 5px;border-radius:4px;font-size:11px;font-family:monospace;font-weight:'+weight+';background:'+bg+';color:'+col+';border:'+brd+';'+scale+'">'+solution[fi]+'</span>';
+        html2+='<span style="display:inline-block;padding:4px 8px;border-radius:6px;font-size:22px;font-family:monospace;font-weight:'+weight+';background:'+bg+';color:'+col+';border:'+brd+';'+scale+'">'+solution[fi]+'</span>';
       }
       fStrip.innerHTML=html2;
     }else{fStrip.innerHTML='';}
@@ -1741,7 +1741,7 @@ function showSolveStep(){
     var oldWm=arrowEl.querySelector('.x2wm');if(oldWm)oldWm.remove();
     var oldBadge=arrowEl.querySelector('.x2badge');if(oldBadge)oldBadge.remove();
     if(dbl){
-      arrowEl.style.border='3px solid #FFD700';
+      arrowEl.style.border='3px solid #FF1744';
       arrowEl.style.borderRadius='10px';
       arrowEl.style.animation='x2pulse 0.8s ease-in-out infinite';
       // "×2" badge top-right
