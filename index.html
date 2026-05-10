@@ -1328,6 +1328,21 @@ function doLBLSolve(){
       mode='solve';
       
       showSolveStep();
+      // Compute energy path
+      setTimeout(function(){
+        if(!window._lblStageMarkers||!solution.length)return;
+        var replay={};['U','R','F','D','L','B'].forEach(function(f){replay[f]=faceColors[f].slice();});
+        window._energyAtStep=[_lbl.getEnergyScore(replay)];
+        window._initialEnergy=window._energyAtStep[0];
+        for(var ei=0;ei<solution.length;ei++){_lbl.dm(replay,solution[ei]);window._energyAtStep.push(_lbl.getEnergyScore(replay));}
+        window._lblStageMarkers.forEach(function(m,idx){
+          var nextIdx=(idx+1<window._lblStageMarkers.length)?window._lblStageMarkers[idx+1].idx:solution.length;
+          m.spell=classifySpell(m.stage,m.explain);
+          m.energyBefore=window._energyAtStep[m.idx];
+          m.energyAfter=window._energyAtStep[nextIdx];
+          m.energyDrop=m.energyBefore-m.energyAfter;
+        });
+      },100);
     }catch(e){
       alert('CFOP 引擎錯誤: '+e.message);
       location.reload();
@@ -1505,6 +1520,27 @@ function miniArrowSVG(mv){
   svg2+='</svg>';return svg2;
 }
 
+
+// === ENERGY SCORING SYSTEM ===
+var EDGE_HOMES=[{c1:'W',c2:'R',f1:'U',p1:7,f2:'F',p2:1},{c1:'W',c2:'B',f1:'U',p1:5,f2:'R',p2:1},{c1:'W',c2:'O',f1:'U',p1:1,f2:'B',p2:1},{c1:'W',c2:'G',f1:'U',p1:3,f2:'L',p2:1},{c1:'R',c2:'B',f1:'F',p1:5,f2:'R',p2:3},{c1:'R',c2:'G',f1:'F',p1:3,f2:'L',p2:5},{c1:'O',c2:'B',f1:'B',p1:3,f2:'R',p2:5},{c1:'O',c2:'G',f1:'B',p1:5,f2:'L',p2:3},{c1:'Y',c2:'R',f1:'D',p1:1,f2:'F',p2:7},{c1:'Y',c2:'B',f1:'D',p1:5,f2:'R',p2:7},{c1:'Y',c2:'O',f1:'D',p1:7,f2:'B',p2:7},{c1:'Y',c2:'G',f1:'D',p1:3,f2:'L',p2:7}];
+var CORNER_HOMES=[{c1:'W',c2:'R',c3:'B',f1:'U',p1:8,f2:'F',p2:2,f3:'R',p3:0},{c1:'W',c2:'R',c3:'G',f1:'U',p1:6,f2:'F',p2:0,f3:'L',p3:2},{c1:'W',c2:'O',c3:'B',f1:'U',p1:2,f2:'B',p2:0,f3:'R',p3:2},{c1:'W',c2:'O',c3:'G',f1:'U',p1:0,f2:'B',p2:2,f3:'L',p3:0},{c1:'Y',c2:'R',c3:'B',f1:'D',p1:2,f2:'F',p2:8,f3:'R',p3:6},{c1:'Y',c2:'R',c3:'G',f1:'D',p1:0,f2:'F',p2:6,f3:'L',p3:8},{c1:'Y',c2:'O',c3:'B',f1:'D',p1:8,f2:'B',p2:6,f3:'R',p3:8},{c1:'Y',c2:'O',c3:'G',f1:'D',p1:6,f2:'B',p2:8,f3:'L',p3:6}];
+
+_lbl.getEnergyScore=function(state){var energy=0;
+  EDGE_HOMES.forEach(function(h){if(state[h.f1][h.p1]===h.c1&&state[h.f2][h.p2]===h.c2)return;var piece=_lbl.findEdge(state,h.c1,h.c2);if(!piece)return;var hL=h.f1==='U'?'U':(h.f1==='D'?'D':'E');energy+=(piece.layer===hL)?20:50;if(hL==='U'&&piece.layer==='U'){var pp={UF:7,UR:5,UB:1,UL:3}[piece.slot];if(pp!==undefined&&state.U[pp]!==h.c1)energy+=30;}if(hL==='D'&&piece.layer==='D'){var pp2={DF:1,DR:5,DB:7,DL:3}[piece.slot];if(pp2!==undefined&&state.D[pp2]!==h.c1)energy+=30;}});
+  CORNER_HOMES.forEach(function(h){if(state[h.f1][h.p1]===h.c1&&state[h.f2][h.p2]===h.c2&&state[h.f3][h.p3]===h.c3)return;var piece=_lbl.findCorner(state,h.c1,h.c2,h.c3);if(!piece)return;var hL=h.f1==='U'?'U':'D';energy+=(piece.layer===hL)?20:50;if(piece.layer==='U'){var pp={UFR:8,UFL:6,UBR:2,UBL:0}[piece.slot];if(pp!==undefined&&state.U[pp]!==h.c1)energy+=30;}if(piece.layer==='D'){var pp2={DFR:2,DFL:0,DBR:8,DBL:6}[piece.slot];if(pp2!==undefined&&state.D[pp2]!==h.c1)energy+=30;}});
+  return energy;
+};
+
+function classifySpell(stage,explain){
+  if(stage==='Cross')return{name:'白色十字',icon:'✚',type:'吸入咒',typeIcon:'🧲'};
+  if(explain.indexOf('踢出')>=0)return{name:'地洞脫逃',icon:'🕳️',type:'吸入咒',typeIcon:'🧲'};
+  if(explain.indexOf('F2L')>=0||explain.indexOf('好朋友')>=0)return{name:'好朋友回家',icon:'🏠',type:'吸入咒',typeIcon:'🧲'};
+  if(explain.indexOf('黃色十字')>=0)return{name:'十字咒',icon:'✚',type:'翻轉咒',typeIcon:'🔄'};
+  if(explain.indexOf('OLL')>=0||explain.indexOf('角塊方向')>=0)return{name:'小魚咒',icon:'🐟',type:'翻轉咒',typeIcon:'🔄'};
+  if(explain.indexOf('PLL')>=0)return{name:'大搬家',icon:'🏗️',type:'換位咒',typeIcon:'🔀'};
+  return{name:explain,icon:'🔮',type:'基礎',typeIcon:'⚙️'};
+}
+
 function showSolveStep(){
   if(solveStep===-1){solveStep++;if(solveStep>0)applyMove(solution[solveStep-1]);}
   if(solveStep>=solution.length){showConfetti();document.getElementById('solveUI').style.display='none';document.getElementById('doneOv').classList.add('show');return;}
@@ -1514,7 +1550,18 @@ function showSolveStep(){
   // Stage label
   var si=getLBLStageInfo(solveStep);
   var sl=document.getElementById('stageLabel');
-  if(si){var sn=STAGE_NAMES[si.stage]||si.stage;var kidExp=kidExplain(si.stage,si.explain);var stageChanged=(_lastStage!==si.stage);_lastStage=si.stage;var pct=Math.round((solveStep+1)/solution.length*100);var badge=stageChanged?'<div style="animation:pulse .6s;font-size:15px;margin-bottom:4px;font-weight:800;color:#00D2FF">'+sn+' 開始！</div>':'';sl.innerHTML=badge+'<span style="display:inline-block;padding:3px 12px;border-radius:20px;font-size:12px;font-weight:800;background:rgba(255,215,0,.15);color:'+(STAGE_COLORS[si.stage]||'#FFD700')+';border:1px solid rgba(255,215,0,.2)">'+sn+'</span><div style="font-size:13px;color:#eee;margin-top:4px;line-height:1.5">'+kidExp+'</div><div style="width:80%;height:4px;background:rgba(255,255,255,.1);border-radius:2px;margin:6px auto 0"><div style="width:'+pct+'%;height:100%;background:linear-gradient(90deg,#00D2FF,#FFD700);border-radius:2px;transition:width .3s"></div></div>';}
+  if(si){var sn=STAGE_NAMES[si.stage]||si.stage;var kidExp=kidExplain(si.stage,si.explain);
+    // Energy display
+    if(window._energyAtStep&&window._energyAtStep[solveStep]!==undefined){
+      var currentEnergy=window._energyAtStep[solveStep];
+      var initialEnergy=window._initialEnergy||1000;
+      var pctRemaining=Math.round(currentEnergy/initialEnergy*100);
+      var spell=si.spell||classifySpell(si.stage,si.explain);
+      var formulaDrop=si.energyDrop||0;
+      var dropText=formulaDrop>0?'<span style="color:#00E676;font-size:14px;font-weight:700">↓'+formulaDrop+'</span>':formulaDrop<0?'<span style="color:#FF5252;font-size:14px;font-weight:700">↑'+Math.abs(formulaDrop)+'</span>':'';
+      var barColor=pctRemaining>60?'#FF5252':pctRemaining>30?'#FFD700':'#00E676';
+      sl.innerHTML='<div style="display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:2px"><span style="font-size:10px;color:rgba(255,255,255,.4)">⚡能量</span><span style="font-size:22px;font-weight:900;color:'+barColor+';font-family:monospace">'+currentEnergy+'</span>'+dropText+'</div><div style="width:80%;height:4px;background:rgba(255,255,255,.08);border-radius:2px;margin:0 auto 2px"><div style="width:'+pctRemaining+'%;height:100%;background:'+barColor+';border-radius:2px;transition:width .5s"></div></div><div style="font-size:11px;color:#eee">'+spell.typeIcon+' <span style="color:#FFD700;font-weight:800">'+spell.name+'</span> <span style="font-size:9px;color:rgba(255,255,255,.35)">('+spell.type+')</span></div>';
+    } else {var stageChanged=(_lastStage!==si.stage);_lastStage=si.stage;var pct=Math.round((solveStep+1)/solution.length*100);var badge=stageChanged?'<div style="animation:pulse .6s;font-size:15px;margin-bottom:4px;font-weight:800;color:#00D2FF">'+sn+' 開始！</div>':'';sl.innerHTML=badge+'<span style="display:inline-block;padding:3px 12px;border-radius:20px;font-size:12px;font-weight:800;background:rgba(255,215,0,.15);color:'+(STAGE_COLORS[si.stage]||'#FFD700')+';border:1px solid rgba(255,215,0,.2)">'+sn+'</span><div style="font-size:13px;color:#eee;margin-top:4px;line-height:1.5">'+kidExp+'</div><div style="width:80%;height:4px;background:rgba(255,255,255,.1);border-radius:2px;margin:6px auto 0"><div style="width:'+pct+'%;height:100%;background:linear-gradient(90deg,#00D2FF,#FFD700);border-radius:2px;transition:width .3s"></div></div>';}}
   // Before grid
   var beforeF=cubeState.F.slice();
   showGridIn('beforeGrid',beforeF);
