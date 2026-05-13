@@ -214,10 +214,37 @@ function doClassifyInner(){
   const FO=['U','R','F','D','L','B'];const all=[];
   FO.forEach(f=>{const r=rawData[f];if(!r)return;for(let i=0;i<9;i++)all.push({face:f,pos:i,rgb:r[i],color:null});});
   if(all.length!==54){showError('只有'+all.length+'個色塊');return;}
-  const anchors={};FO.forEach(f=>{anchors[CC[f]]=rawData[f][4];});
+
+  // Build anchors. GAN logo fix: if U center is too saturated (logo is blue),
+  // synthesize a neutral white from its brightness.
+  const anchors={};
+  FO.forEach(f=>{
+    if(f==='U'){
+      const c=rawData[f][4];
+      const mx=Math.max(c[0],c[1],c[2]),mn=Math.min(c[0],c[1],c[2]);
+      const sat=(mx>0)?(mx-mn)/mx:0;
+      if(sat>0.15){const avg=Math.round((c[0]+c[1]+c[2])/3);anchors['W']=[avg,avg,avg];}
+      else anchors['W']=c;
+    } else anchors[CC[f]]=rawData[f][4];
+  });
   all.forEach(s=>{if(s.pos===4)s.color=CC[s.face];});
-  function toHSV(r,g,b){const rf=r/255,gf=g/255,bf=b/255,mx=Math.max(rf,gf,bf),mn=Math.min(rf,gf,bf),d=mx-mn;const v=mx,s=mx>0?d/mx:0;let h=0;if(d>0.001){if(mx===rf)h=60*(((gf-bf)/d)%6);else if(mx===gf)h=60*((bf-rf)/d+2);else h=60*((rf-gf)/d+4);if(h<0)h+=360;}return[h,s,v];}
-  function smartDist(r,g,b,ar,ag,ab,c){const[h,s,v]=toHSV(r,g,b);const[ah,as,av]=toHSV(ar,ag,ab);if(c==='W')return s*5+Math.abs(v-av)*2;if(s<0.15)return 10;let hd=Math.abs(h-ah);hd=Math.min(hd,360-hd);const inRO=(h>300||h<40)&&(ah>300||ah<40);if(inRO){return Math.abs(r-ar)/255*100+Math.abs(v-av)*50+hd*0.5;}return hd+Math.abs(v-av)*30;}
+
+  function toHSV(r,g,b){
+    const rf=r/255,gf=g/255,bf=b/255,mx=Math.max(rf,gf,bf),mn=Math.min(rf,gf,bf),d=mx-mn;
+    const v=mx,s=mx>0?d/mx:0;let h=0;
+    if(d>0.001){if(mx===rf)h=60*(((gf-bf)/d)%6);else if(mx===gf)h=60*((bf-rf)/d+2);else h=60*((rf-gf)/d+4);if(h<0)h+=360;}
+    return[h,s,v];
+  }
+  function smartDist(r,g,b,ar,ag,ab,c){
+    const[h,s,v]=toHSV(r,g,b);const[ah,as,av]=toHSV(ar,ag,ab);
+    if(c==='W'){if(s<0.18)return(1-v)*3+s*8;return 10+s*20;}
+    if(s<0.12)return 15;
+    let hd=Math.abs(h-ah);hd=Math.min(hd,360-hd);
+    const inRO=(h>300||h<50)&&(ah>300||ah<50);
+    if(inRO){const gR=g/(r+1),aGR=ag/(ar+1);return Math.abs(gR-aGR)*200+Math.abs(v-av)*30+hd*0.3;}
+    return hd+Math.abs(v-av)*30+Math.abs(s-as)*10;
+  }
+
   const nonC=all.filter(s=>s.pos!==4);
   nonC.forEach(s=>{s.dists={};Object.entries(anchors).forEach(([c,[ar,ag,ab]])=>{const[r,g,b]=s.rgb;s.dists[c]=smartDist(r,g,b,ar,ag,ab,c);});});
   const cnt={W:1,R:1,B:1,O:1,G:1,Y:1};const cands=[];
@@ -225,29 +252,95 @@ function doClassifyInner(){
   cands.sort((a,b)=>a.d-b.d);
   cands.forEach(({s,c})=>{if(s.color||cnt[c]>=9)return;s.color=c;cnt[c]++;});
   nonC.filter(s=>!s.color).forEach(s=>{const a=Object.entries(cnt).find(([c,n])=>n<9);if(a){s.color=a[0];cnt[a[0]]++;}});
-  nonC.forEach(s=>{const sorted=Object.entries(s.dists).sort((a,b)=>a[1]-b[1]);s.bestDist=sorted[0][1];s.secondColor=sorted[1][0];s.secondDist=sorted[1][1];s.ambiguity=s.secondDist>0?(s.secondDist-s.bestDist)/s.secondDist:1;});
+  nonC.forEach(s=>{const sorted=Object.entries(s.dists).sort((a,b)=>a[1]-b[1]);s.sortedDists=sorted;s.bestDist=sorted[0][1];s.secondColor=sorted[1][0];s.secondDist=sorted[1][1];s.ambiguity=s.secondDist>0?(s.secondDist-s.bestDist)/s.secondDist:1;});
   FO.forEach(f=>{faceColors[f]=all.filter(s=>s.face===f).sort((a,b)=>a.pos-b.pos).map(s=>s.color);});
-  // Edge constraint validation
-  const invalidPairs=[['R','O'],['W','Y'],['B','G']];
-  function isInvalidEdge(c1,c2){return invalidPairs.some(([a,b])=>(c1===a&&c2===b)||(c1===b&&c2===a))||c1===c2;}
-  const edgeConstraints=[['F',5,'R',3],['R',5,'B',3],['B',5,'L',3],['L',5,'F',3],['F',2,'R',0],['R',2,'B',0],['B',2,'L',0],['L',2,'F',0],['F',8,'R',6],['R',8,'B',6],['B',8,'L',6],['L',8,'F',6],['U',6,'F',0],['U',7,'F',1],['U',8,'F',2],['U',8,'R',0],['U',5,'R',1],['U',2,'R',2],['U',2,'B',0],['U',1,'B',1],['U',0,'B',2],['U',0,'L',0],['U',3,'L',1],['U',6,'L',2],['D',0,'F',6],['D',1,'F',7],['D',2,'F',8],['D',2,'R',6],['D',5,'R',7],['D',8,'R',8],['D',8,'B',6],['D',7,'B',7],['D',6,'B',8],['D',0,'L',8],['D',3,'L',7],['D',6,'L',6]];
-  for(let pass=0;pass<3;pass++){for(const[f1,p1,f2,p2]of edgeConstraints){const c1=faceColors[f1][p1],c2=faceColors[f2][p2];if(isInvalidEdge(c1,c2)){const s1=nonC.find(s=>s.face===f1&&s.pos===p1),s2=nonC.find(s=>s.face===f2&&s.pos===p2);if(!s1||!s2)continue;if(s1.ambiguity<s2.ambiguity){s1.color=s1.secondColor;faceColors[f1][p1]=s1.secondColor;}else{s2.color=s2.secondColor;faceColors[f2][p2]=s2.secondColor;}}}}
-  // Validate count
+
+  // === VALIDITY CHECK + AUTO-FIX ===
+  const OPPOSITE={W:'Y',Y:'W',R:'O',O:'R',B:'G',G:'B'};
+  function isInvalidPiece(cols){for(let i=0;i<cols.length;i++)for(let j=i+1;j<cols.length;j++)if(cols[i]===cols[j]||OPPOSITE[cols[i]]===cols[j])return true;return false;}
+  const EDGE_POS=[['U',7,'F',1],['U',5,'R',1],['U',1,'B',1],['U',3,'L',1],['F',5,'R',3],['F',3,'L',5],['B',3,'R',5],['B',5,'L',3],['D',1,'F',7],['D',5,'R',7],['D',7,'B',7],['D',3,'L',7]];
+  const CORNER_POS=[['U',8,'F',2,'R',0],['U',6,'F',0,'L',2],['U',0,'B',2,'L',0],['U',2,'B',0,'R',2],['D',2,'F',8,'R',6],['D',0,'F',6,'L',8],['D',6,'B',8,'L',6],['D',8,'B',6,'R',8]];
+  function getInvalidPieces(){
+    const bad=[];
+    EDGE_POS.forEach(([f1,p1,f2,p2],idx)=>{if(isInvalidPiece([faceColors[f1][p1],faceColors[f2][p2]]))bad.push({type:'edge',idx,positions:[[f1,p1],[f2,p2]]});});
+    CORNER_POS.forEach(([f1,p1,f2,p2,f3,p3],idx)=>{if(isInvalidPiece([faceColors[f1][p1],faceColors[f2][p2],faceColors[f3][p3]]))bad.push({type:'corner',idx,positions:[[f1,p1],[f2,p2],[f3,p3]]});});
+    return bad;
+  }
+  // Fix by count-balanced swaps between opposite-color pairs
+  function tryAutoFix(maxIter){
+    for(let iter=0;iter<maxIter;iter++){
+      const bad=getInvalidPieces();if(bad.length===0)return true;
+      const badStickers=[];
+      bad.forEach(b=>b.positions.forEach(([f,p])=>{if(p!==4){const s=nonC.find(x=>x.face===f&&x.pos===p);if(s&&!badStickers.includes(s))badStickers.push(s);}}));
+      badStickers.sort((a,b)=>a.ambiguity-b.ambiguity);
+      let fixed=false;
+      for(const bs of badStickers){
+        const cur=bs.color;
+        for(let ci=0;ci<bs.sortedDists.length;ci++){
+          const alt=bs.sortedDists[ci][0];if(alt===cur)continue;
+          const swaps=nonC.filter(s=>s!==bs&&s.color===alt&&s.pos!==4).sort((a,b)=>a.dists[cur]-b.dists[cur]);
+          for(const sc of swaps){
+            bs.color=alt;sc.color=cur;faceColors[bs.face][bs.pos]=alt;faceColors[sc.face][sc.pos]=cur;
+            if(getInvalidPieces().length<bad.length){fixed=true;break;}
+            bs.color=cur;sc.color=alt;faceColors[bs.face][bs.pos]=cur;faceColors[sc.face][sc.pos]=alt;
+          }
+          if(fixed)break;
+        }
+        if(fixed)break;
+      }
+      if(!fixed)return false;
+    }
+    return getInvalidPieces().length===0;
+  }
+  function tryBruteFix(){
+    const bad=getInvalidPieces();if(bad.length===0)return true;
+    const pairs=[['R','O'],['W','Y'],['B','G']];
+    for(const[cA,cB]of pairs){
+      const gA=nonC.filter(s=>s.color===cA&&s.pos!==4).sort((a,b)=>a.dists[cB]-b.dists[cB]);
+      const gB=nonC.filter(s=>s.color===cB&&s.pos!==4).sort((a,b)=>a.dists[cA]-b.dists[cA]);
+      for(let i=0;i<Math.min(gA.length,4);i++){
+        for(let j=0;j<Math.min(gB.length,4);j++){
+          const sa=gA[i],sb=gB[j];
+          sa.color=cB;sb.color=cA;faceColors[sa.face][sa.pos]=cB;faceColors[sb.face][sb.pos]=cA;
+          if(getInvalidPieces().length<bad.length){if(tryAutoFix(10))return true;if(getInvalidPieces().length<bad.length)return tryBruteFix();}
+          sa.color=cA;sb.color=cB;faceColors[sa.face][sa.pos]=cA;faceColors[sb.face][sb.pos]=cB;
+        }
+      }
+    }
+    return false;
+  }
+  let autoFixed=tryAutoFix(20);
+  if(!autoFixed)autoFixed=tryBruteFix();
+
+  // Final: actually test CFOP engine
+  let engineOk=false;
+  if(autoFixed){
+    try{
+      const ts={};FO.forEach(f=>{ts[f]=faceColors[f].slice();});
+      const tr=_lbl.cfopEngine(ts),sv=_lbl.solved();engineOk=true;
+      FO.forEach(f=>{for(let i=0;i<9;i++){if(tr.state[f][i]!==sv[f][i])engineOk=false;}});
+    }catch(e){engineOk=false;}
+  }
+
   let fl='';FO.forEach(f=>{faceColors[f].forEach(x=>fl+=C2F[x]||'?');});
   const fcnt={};for(const ch of fl)fcnt[ch]=(fcnt[ch]||0)+1;
   const ok2=!fl.includes('?')&&Object.values(fcnt).every(v=>v===9);
-  if(!ok2){
-    document.getElementById('info').innerHTML='<span style="color:#FFA500">顏色辨識可能有誤，請確認或手動修正</span>';
+  if(!ok2||!engineOk){
+    const bp=getInvalidPieces();
+    let msg='<span style="color:#FFA500">顏色辨識可能有誤';
+    if(bp.length>0)msg+='（'+bp.length+'個色塊組合不合法）';
+    else if(!engineOk)msg+='（引擎無法還原）';
+    msg+='<br>請對照魔方手動修正</span>';
+    document.getElementById('info').innerHTML=msg;
     showEditableFaces();
     document.getElementById('btnRow').innerHTML='<button class="btn" onclick="doManualSolve()">✅ 確認後解題</button>';
     return;
   }
-  // Success
   if(vid&&vid.srcObject){vid.srcObject.getTracks().forEach(t=>t.stop());vid.srcObject=null;}
   if(vid)vid.style.display='none';
   document.querySelector('.wrap').style.background='#000';
   if(ov)ov.style.display='none';
-  document.getElementById('info').innerHTML='✅ 辨識成功！';
+  document.getElementById('info').innerHTML='✅ 辨識成功！（已驗證可還原）';
   showFacePreviews('mgrid');
   document.getElementById('btnRow').innerHTML='<button class="btn" onclick="doLBLSolve()">🧩 LBL 解題！</button><button class="btn btn-sm" style="margin-top:6px;background:rgba(255,255,255,.12);color:#ccc" onclick="showEditMode()">✏️ 手動修正</button>';
 }
