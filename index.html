@@ -274,6 +274,13 @@ function doManualSolve(){
 
 function doClassify(){try{doClassifyInner();}catch(e){showError('分析錯誤: '+e.message);}}
 function doClassifyInner(){
+  // === FACE ORIENTATION CORRECTION ===
+  // Scan sequence F→R→D→B→L→U involves tilts/rotations that cause D, B, L
+  // to be photographed rotated 90° CCW relative to their standard orientation.
+  // Apply rot90CW to correct: [6,3,0, 7,4,1, 8,5,2]
+  function rot90CW(arr){return[arr[6],arr[3],arr[0],arr[7],arr[4],arr[1],arr[8],arr[5],arr[2]];}
+  ['D','B','L'].forEach(f=>{if(rawData[f])rawData[f]=rot90CW(rawData[f]);});
+
   const FO=['U','R','F','D','L','B'];const all=[];
   FO.forEach(f=>{const r=rawData[f];if(!r)return;for(let i=0;i<9;i++)all.push({face:f,pos:i,rgb:r[i],color:null});});
   if(all.length!==54){showError('只有'+all.length+'個色塊');return;}
