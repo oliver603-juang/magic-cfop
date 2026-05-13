@@ -8,6 +8,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&display=swap');
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 body{font-family:'Nunito',sans-serif;background:#000;color:#fff;height:100dvh;overflow:hidden;display:flex;flex-direction:column}
+#versionTag{position:fixed;top:4px;right:8px;z-index:10001;font:10px monospace;color:rgba(255,215,0,.7);pointer-events:none}
 .wrap{position:relative;flex:1;overflow:hidden}
 video{width:100%;height:100%;object-fit:cover}
 canvas#ov{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none}
@@ -59,7 +60,9 @@ canvas#ov{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:n
  <div style="font-size:15px;font-weight:800;color:#00D2FF;margin-top:2px">CFOP v3 速解法</div>
  <div style="font-size:13px;color:rgba(255,255,255,.5);margin-top:10px;max-width:280px;text-align:center;line-height:1.6">📸 拍攝6面 → 🧩 CFOP 速解 · 平均72步<br>全程白色朝上！適合初學者</div>
  <button class="btn" style="margin-top:20px;font-size:18px;padding:16px 40px" onclick="startApp()">📸 開始掃描</button>
- <button class="btn btn-sm" style="margin-top:10px;background:rgba(255,255,255,.12);color:#ccc" onclick="startManual()">✏️ 手動輸入顏色</button>
+ <button class="btn btn-sm" style="margin-top:10px;background:rgba(255,255,255,.12);color:#ccc" onclick="startGallery()">🖼️ 從圖庫上傳 6 張照片</button>
+ <button class="btn btn-sm" style="margin-top:6px;background:rgba(255,255,255,.08);color:#999;font-size:11px" onclick="startManual()">✏️ 手動輸入顏色</button>
+ <input type="file" id="galleryInput" accept="image/*" multiple style="display:none" onchange="handleGalleryFiles(this.files)">
 </div>
 <div class="overlay" id="doneOv">
  <div style="font-size:64px">🎉</div>
@@ -111,17 +114,9 @@ async function startApp(){
   try{
     const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280},height:{ideal:720}}});
     vid.srcObject=s;await vid.play();
-    // Force torch ON for consistent white-balance lighting
+    // Torch OFF — rely on ambient lighting for more natural color reading
     const track=s.getVideoTracks()[0];
-    if(track){
-      try{
-        await track.applyConstraints({advanced:[{torch:true}]});
-        window._torchOn=true;
-      }catch(te){
-        console.log('Torch not available:',te.message);
-        window._torchOn=false;
-      }
-    }
+    window._torchOn=false;
     ov.width=vid.videoWidth||720;ov.height=vid.videoHeight||1280;
     mode='scan';scanIdx=0;showScanUI();
   }catch(e){alert('相機錯誤: '+e.message);}
@@ -141,6 +136,136 @@ function startManual(){
   document.getElementById('info').textContent='完成後按下方按鈕';
   showEditableFaces();
   document.getElementById('btnRow').innerHTML='<button class="btn" onclick="doManualSolve()">🧩 LBL 解題！</button>';
+}
+
+// ===== GALLERY UPLOAD =====
+function startGallery(){
+  document.getElementById('galleryInput').click();
+}
+function handleGalleryFiles(files){
+  if(!files||files.length===0)return;
+  const imgs=Array.from(files).filter(f=>f.type.startsWith('image/'));
+  if(imgs.length<6){alert('請選擇 6 張照片（順序：F紅→R藍→D黃→B橘→L綠→U白）');return;}
+  if(imgs.length>6)imgs.length=6;
+  // Sort by name to maintain order
+  imgs.sort((a,b)=>a.name.localeCompare(b.name));
+  // Hide start overlay, show scan UI
+  document.getElementById('startOv').classList.remove('show');
+  document.getElementById('startOv').style.display='none';
+  document.querySelector('.wrap').style.background='#111';
+  if(vid)vid.style.display='none';
+  document.getElementById('topBar').style.display='block';
+  document.getElementById('botBar').style.display='block';
+  window._galleryImgs=imgs;
+  window._galleryIdx=0;
+  rawData={};scanIdx=0;
+  showGalleryStep();
+}
+function showGalleryStep(){
+  const idx=window._galleryIdx;
+  if(idx>=6){
+    // All 6 done — auto-classify
+    scanIdx=6;
+    document.getElementById('title').textContent='✅ 6面上傳完成！';
+    document.getElementById('sub').textContent='按下方按鈕分析顏色';
+    document.getElementById('info').textContent='';
+    document.getElementById('dots').innerHTML=SCAN_SEQ.map(()=>'<div class="td done"></div>').join('');
+    document.getElementById('btnRow').innerHTML='<button class="btn" onclick="doClassify()">🔍 分析顏色</button>';
+    return;
+  }
+  const info=SCAN_SEQ[idx];
+  document.getElementById('title').textContent='🖼️ '+info.name;
+  document.getElementById('sub').textContent='上傳照片 '+(idx+1)+'/6';
+  document.getElementById('dots').innerHTML=SCAN_SEQ.map((_,i)=>'<div class="td'+(i<idx?' done':'')+(i===idx?' now':'')+'"></div>').join('');
+  document.getElementById('info').textContent='正在處理 '+info.name+'...';
+  document.getElementById('mgrid').style.display='none';
+  document.getElementById('btnRow').innerHTML='';
+  // Load and process the image
+  const file=window._galleryImgs[idx];
+  const reader=new FileReader();
+  reader.onload=function(e){
+    const img=new Image();
+    img.onload=function(){
+      processGalleryImage(img,idx);
+    };
+    img.src=e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+function processGalleryImage(img,idx){
+  // Draw image to canvas and sample 9 cells (same as doScanCapture)
+  const tc=document.createElement('canvas');
+  const vw=img.naturalWidth,vh=img.naturalHeight;
+  tc.width=vw;tc.height=vh;
+  const tctx=tc.getContext('2d');tctx.drawImage(img,0,0,vw,vh);
+  const gs=Math.min(vw,vh)*0.68,cs=gs/3,sx=(vw-gs)/2,sy=(vh-gs)/2;
+  let rgbs=[];
+  const isUface=SCAN_SEQ[idx].f==='U';
+  for(let r=0;r<3;r++)for(let c=0;c<3;c++){
+    const px=Math.round(sx+(c+.5)*cs),py=Math.round(sy+(r+.5)*cs);
+    const isCenter=(r===1&&c===1);
+    if(isUface&&isCenter){
+      // GAN logo avoidance: sample 4 offset points, pick the lowest-saturation one
+      const off=Math.round(cs*0.4);
+      const pts=[[px-off,py],[px+off,py],[px,py-off],[px,py+off]];
+      let bestSat=Infinity,bestRGB=[200,200,200];
+      pts.forEach(([ppx,ppy])=>{
+        const d=tctx.getImageData(Math.max(0,ppx-3),Math.max(0,ppy-3),7,7);
+        let rr=0,gg=0,bb=0;
+        for(let i=0;i<d.data.length;i+=4){rr+=d.data[i];gg+=d.data[i+1];bb+=d.data[i+2];}
+        const n=d.data.length/4;
+        const pr=Math.round(rr/n),pg=Math.round(gg/n),pb=Math.round(bb/n);
+        const mx=Math.max(pr,pg,pb),sat=mx>0?(mx-Math.min(pr,pg,pb))/mx:0;
+        if(sat<bestSat){bestSat=sat;bestRGB=[pr,pg,pb];}
+      });
+      rgbs.push(bestRGB);
+    } else {
+      const sampleSize=Math.max(5,Math.round(cs*0.08));
+      const half=Math.floor(sampleSize/2);
+      const d=tctx.getImageData(Math.max(0,px-half),Math.max(0,py-half),sampleSize,sampleSize);
+      let rr=0,gg=0,bb=0;
+      for(let i=0;i<d.data.length;i+=4){rr+=d.data[i];gg+=d.data[i+1];bb+=d.data[i+2];}
+      const n=d.data.length/4;rgbs.push([Math.round(rr/n),Math.round(gg/n),Math.round(bb/n)]);
+    }
+  }
+  rawData[SCAN_SEQ[idx].f]=rgbs;
+  // Show preview + image thumbnail
+  const mg=document.getElementById('mgrid');mg.style.display='grid';
+  mg.innerHTML=rgbs.map(([r,g,b],i)=>'<div class="mcell" style="background:rgb('+r+','+g+','+b+')">'+(i===4?'⭐':'')+'</div>').join('');
+  // Show the uploaded image as background preview
+  const wrap=document.querySelector('.wrap');
+  wrap.style.backgroundImage='url('+img.src+')';
+  wrap.style.backgroundSize='contain';
+  wrap.style.backgroundPosition='center';
+  wrap.style.backgroundRepeat='no-repeat';
+  const info=SCAN_SEQ[idx];
+  document.getElementById('info').textContent='✅ '+info.name+' 已處理 ('+rgbs.map(([r,g,b])=>'rgb('+r+','+g+','+b+')').join(' ')+')';
+  // Show button to continue or re-upload
+  document.getElementById('btnRow').innerHTML=
+    '<button class="btn" onclick="galleryNext()">▶️ '+(idx<5?'下一面':'完成 — 分析顏色')+'</button>'+
+    '<button class="btn btn-sm" style="margin-top:6px;background:rgba(255,255,255,.12);color:#ccc" onclick="galleryReplace('+idx+')">🔄 重新選擇此面</button>';
+}
+function galleryNext(){
+  document.querySelector('.wrap').style.backgroundImage='';
+  window._galleryIdx++;
+  showGalleryStep();
+}
+function galleryReplace(idx){
+  // Let user pick a single replacement image
+  const inp=document.createElement('input');
+  inp.type='file';inp.accept='image/*';
+  inp.onchange=function(){
+    if(!inp.files||!inp.files[0])return;
+    window._galleryImgs[idx]=inp.files[0];
+    const reader=new FileReader();
+    reader.onload=function(e){
+      const img=new Image();
+      img.onload=function(){processGalleryImage(img,idx);};
+      img.src=e.target.result;
+    };
+    reader.readAsDataURL(inp.files[0]);
+  };
+  inp.click();
 }
 function retakeCurrent(){
   // Re-show the scan UI for the current face (don't advance scanIdx)
@@ -192,16 +317,20 @@ function doScanCapture(){
     const px=Math.round(sx+(c+.5)*cs),py=Math.round(sy+(r+.5)*cs);
     const isCenter=(r===1&&c===1);
     if(isUface&&isCenter){
-      // GAN logo avoidance: sample 4 offset points around center
-      const off=Math.round(cs*0.3);
+      // GAN logo avoidance: sample 4 offset points, pick the lowest-saturation one
+      const off=Math.round(cs*0.4);
       const pts=[[px-off,py],[px+off,py],[px,py-off],[px,py+off]];
-      let rr=0,gg=0,bb=0,total=0;
+      let bestSat=Infinity,bestRGB=[200,200,200];
       pts.forEach(([ppx,ppy])=>{
         const d=tctx.getImageData(ppx-3,ppy-3,7,7);
+        let rr=0,gg=0,bb=0;
         for(let i=0;i<d.data.length;i+=4){rr+=d.data[i];gg+=d.data[i+1];bb+=d.data[i+2];}
-        total+=d.data.length/4;
+        const n=d.data.length/4;
+        const pr=Math.round(rr/n),pg=Math.round(gg/n),pb=Math.round(bb/n);
+        const mx=Math.max(pr,pg,pb),sat=mx>0?(mx-Math.min(pr,pg,pb))/mx:0;
+        if(sat<bestSat){bestSat=sat;bestRGB=[pr,pg,pb];}
       });
-      rgbs.push([Math.round(rr/total),Math.round(gg/total),Math.round(bb/total)]);
+      rgbs.push(bestRGB);
     } else {
       const d=tctx.getImageData(px-5,py-5,11,11);let rr=0,gg=0,bb=0;
       for(let i=0;i<d.data.length;i+=4){rr+=d.data[i];gg+=d.data[i+1];bb+=d.data[i+2];}
@@ -276,10 +405,12 @@ function doClassify(){try{doClassifyInner();}catch(e){showError('分析錯誤: '
 function doClassifyInner(){
   // === FACE ORIENTATION CORRECTION ===
   // Scan sequence F→R→D→B→L→U involves tilts/rotations that cause D, B, L
-  // to be photographed rotated 90° CCW relative to their standard orientation.
-  // Apply rot90CW to correct: [6,3,0, 7,4,1, 8,5,2]
-  function rot90CW(arr){return[arr[6],arr[3],arr[0],arr[7],arr[4],arr[1],arr[8],arr[5],arr[2]];}
-  ['D','B','L'].forEach(f=>{if(rawData[f])rawData[f]=rot90CW(rawData[f]);});
+  // to be photographed rotated relative to their standard orientation.
+  // All three need rot90CCW: camera→standard mapping is [2,5,8,1,4,7,0,3,6]
+  function rot90CCW(arr){return[arr[2],arr[5],arr[8],arr[1],arr[4],arr[7],arr[0],arr[3],arr[6]];}
+  if(rawData['D'])rawData['D']=rot90CCW(rawData['D']);
+  if(rawData['B'])rawData['B']=rot90CCW(rawData['B']);
+  if(rawData['L'])rawData['L']=rot90CCW(rawData['L']);
 
   const FO=['U','R','F','D','L','B'];const all=[];
   FO.forEach(f=>{const r=rawData[f];if(!r)return;for(let i=0;i<9;i++)all.push({face:f,pos:i,rgb:r[i],color:null});});
@@ -354,11 +485,49 @@ function doClassifyInner(){
 
   const nonC=all.filter(s=>s.pos!==4);
   nonC.forEach(s=>{s.dists={};Object.entries(anchors).forEach(([c,[ar,ag,ab]])=>{const[r,g,b]=s.rgb;s.dists[c]=smartDist(r,g,b,ar,ag,ab,c);});});
-  const cnt={W:1,R:1,B:1,O:1,G:1,Y:1};const cands=[];
-  nonC.forEach(s=>{Object.entries(s.dists).forEach(([c,d])=>{cands.push({s,c,d});});});
-  cands.sort((a,b)=>a.d-b.d);
-  cands.forEach(({s,c})=>{if(s.color||cnt[c]>=9)return;s.color=c;cnt[c]++;});
-  nonC.filter(s=>!s.color).forEach(s=>{const a=Object.entries(cnt).find(([c,n])=>n<9);if(a){s.color=a[0];cnt[a[0]]++;}});
+
+  // === OPTIMAL ASSIGNMENT (min-cost with quota constraints) ===
+  // Each color needs exactly 8 more stickers (9 total minus center).
+  // Use iterative auction: assign each sticker to its best available color,
+  // then resolve over-allocated colors by bumping highest-cost stickers.
+  const quota={W:8,R:8,B:8,O:8,G:8,Y:8};
+  // Initial assignment: each sticker gets its best color
+  nonC.forEach(s=>{
+    let best=null,bestD=Infinity;
+    Object.entries(s.dists).forEach(([c,d])=>{if(d<bestD){bestD=d;best=c;}});
+    s.color=best;
+  });
+  // Iteratively fix over-quota colors by bumping worst-fit stickers to their next-best
+  for(let iter=0;iter<200;iter++){
+    const cnt={W:0,R:0,B:0,O:0,G:0,Y:0};
+    nonC.forEach(s=>cnt[s.color]++);
+    // Find an over-quota color
+    const over=Object.keys(cnt).find(c=>cnt[c]>quota[c]);
+    if(!over)break; // all balanced
+    // Among stickers assigned to 'over', find the one with smallest penalty to switch
+    const inOver=nonC.filter(s=>s.color===over);
+    let bestSwitch=null,bestCost=Infinity;
+    inOver.forEach(s=>{
+      const curD=s.dists[over];
+      Object.entries(s.dists).forEach(([c,d])=>{
+        if(c===over)return;
+        if(cnt[c]>=quota[c])return; // target also full
+        const penalty=d-curD; // cost increase of switching
+        if(penalty<bestCost){bestCost=penalty;bestSwitch={s,from:over,to:c};}
+      });
+    });
+    if(!bestSwitch){
+      // No direct switch possible; find any under-quota color and force
+      const under=Object.keys(cnt).find(c=>cnt[c]<quota[c]);
+      if(!under)break;
+      // Pick the sticker in 'over' with smallest distance to 'under'
+      let best2=null,bestD2=Infinity;
+      inOver.forEach(s=>{if(s.dists[under]<bestD2){bestD2=s.dists[under];best2=s;}});
+      if(best2){best2.color=under;}else break;
+    }else{
+      bestSwitch.s.color=bestSwitch.to;
+    }
+  }
   nonC.forEach(s=>{const sorted=Object.entries(s.dists).sort((a,b)=>a[1]-b[1]);s.sortedDists=sorted;s.bestDist=sorted[0][1];s.secondColor=sorted[1][0];s.secondDist=sorted[1][1];s.ambiguity=s.secondDist>0?(s.secondDist-s.bestDist)/s.secondDist:1;});
   FO.forEach(f=>{faceColors[f]=all.filter(s=>s.face===f).sort((a,b)=>a.pos-b.pos).map(s=>s.color);});
 
@@ -2178,4 +2347,5 @@ function prevMove(){if(solveStep<=0)return;undoMoveOnState(solution[solveStep-1]
 (async function(){try{await navigator.wakeLock.request('screen');}catch(e){}})();
 if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(function(){});}
 </script>
+<div id="versionTag">v23-fix7</div>
 </body></html>
