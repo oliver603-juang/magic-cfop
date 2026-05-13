@@ -170,11 +170,26 @@ function doScanCapture(){
   const tctx=tc.getContext('2d');tctx.drawImage(vid,0,0,vw,vh);
   const gs=Math.min(vw,vh)*0.82,cs=gs/3,sx=(vw-gs)/2,sy=(vh-gs)/2;
   let rgbs=[];
+  const isUface=SCAN_SEQ[scanIdx].f==='U';
   for(let r=0;r<3;r++)for(let c=0;c<3;c++){
     const px=Math.round(sx+(c+.5)*cs),py=Math.round(sy+(r+.5)*cs);
-    const d=tctx.getImageData(px-5,py-5,11,11);let rr=0,gg=0,bb=0;
-    for(let i=0;i<d.data.length;i+=4){rr+=d.data[i];gg+=d.data[i+1];bb+=d.data[i+2];}
-    const n=d.data.length/4;rgbs.push([Math.round(rr/n),Math.round(gg/n),Math.round(bb/n)]);
+    const isCenter=(r===1&&c===1);
+    if(isUface&&isCenter){
+      // GAN logo avoidance: sample 4 offset points around center (skip the logo)
+      const off=Math.round(cs*0.3); // ~30% of cell size away from center
+      const pts=[[px-off,py],[px+off,py],[px,py-off],[px,py+off]];
+      let rr=0,gg=0,bb=0,total=0;
+      pts.forEach(([ppx,ppy])=>{
+        const d=tctx.getImageData(ppx-3,ppy-3,7,7);
+        for(let i=0;i<d.data.length;i+=4){rr+=d.data[i];gg+=d.data[i+1];bb+=d.data[i+2];}
+        total+=d.data.length/4;
+      });
+      rgbs.push([Math.round(rr/total),Math.round(gg/total),Math.round(bb/total)]);
+    } else {
+      const d=tctx.getImageData(px-5,py-5,11,11);let rr=0,gg=0,bb=0;
+      for(let i=0;i<d.data.length;i+=4){rr+=d.data[i];gg+=d.data[i+1];bb+=d.data[i+2];}
+      const n=d.data.length/4;rgbs.push([Math.round(rr/n),Math.round(gg/n),Math.round(bb/n)]);
+    }
   }
   rawData[SCAN_SEQ[scanIdx].f]=rgbs;
   if(navigator.vibrate)navigator.vibrate(80);
@@ -226,16 +241,35 @@ function doClassifyInner(){
   FO.forEach(f=>{const r=rawData[f];if(!r)return;for(let i=0;i<9;i++)all.push({face:f,pos:i,rgb:r[i],color:null});});
   if(all.length!==54){showError('只有'+all.length+'個色塊');return;}
 
-  // Build anchors. GAN logo fix: if U center is too saturated (logo is blue),
-  // synthesize a neutral white from its brightness.
+  // Build anchors. GAN logo fix: if U center pixel is too saturated or too dark
+  // (logo covers center), find the best white reference from U face's other stickers.
   const anchors={};
+  function _sat(r,g,b){const mx=Math.max(r,g,b);return mx>0?(mx-Math.min(r,g,b))/mx:0;}
   FO.forEach(f=>{
     if(f==='U'){
       const c=rawData[f][4];
-      const mx=Math.max(c[0],c[1],c[2]),mn=Math.min(c[0],c[1],c[2]);
-      const sat=(mx>0)?(mx-mn)/mx:0;
-      if(sat>0.15){const avg=Math.round((c[0]+c[1]+c[2])/3);anchors['W']=[avg,avg,avg];}
-      else anchors['W']=c;
+      const sat=_sat(c[0],c[1],c[2]);
+      const bright=Math.max(c[0],c[1],c[2])/255;
+      if(sat>0.15||bright<0.5){
+        // Center is corrupted by logo — scan ALL 8 non-center U stickers,
+        // pick the one with lowest saturation + highest brightness as white ref.
+        let bestIdx=-1,bestScore=Infinity;
+        for(let i=0;i<9;i++){
+          if(i===4)continue;
+          const[r,g,b]=rawData[f][i];
+          const s=_sat(r,g,b), v=Math.max(r,g,b)/255;
+          const score=s*5+(1-v)*3; // low sat + high brightness = best white
+          if(score<bestScore){bestScore=score;bestIdx=i;}
+        }
+        if(bestIdx>=0){
+          anchors['W']=rawData[f][bestIdx];
+        } else {
+          // Fallback: synthesize neutral white at high brightness
+          anchors['W']=[210,210,210];
+        }
+      } else {
+        anchors['W']=c;
+      }
     } else anchors[CC[f]]=rawData[f][4];
   });
   all.forEach(s=>{if(s.pos===4)s.color=CC[s.face];});
