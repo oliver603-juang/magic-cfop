@@ -111,6 +111,17 @@ async function startApp(){
   try{
     const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280},height:{ideal:720}}});
     vid.srcObject=s;await vid.play();
+    // Force torch ON for consistent white-balance lighting
+    const track=s.getVideoTracks()[0];
+    if(track){
+      try{
+        await track.applyConstraints({advanced:[{torch:true}]});
+        window._torchOn=true;
+      }catch(te){
+        console.log('Torch not available:',te.message);
+        window._torchOn=false;
+      }
+    }
     ov.width=vid.videoWidth||720;ov.height=vid.videoHeight||1280;
     mode='scan';scanIdx=0;showScanUI();
   }catch(e){alert('相機錯誤: '+e.message);}
@@ -312,6 +323,57 @@ function doClassifyInner(){
   let autoFixed=tryAutoFix(20);
   if(!autoFixed)autoFixed=tryBruteFix();
 
+  // === BUILD DEBUG INFO ===
+  const dbg=[];
+  dbg.push('🔦 補光燈: '+(window._torchOn?'ON':'OFF'));
+  dbg.push('');
+  // Anchors
+  dbg.push('=== 錨點 (中心色 RGB) ===');
+  const anchorNames={W:'白',R:'紅',B:'藍',O:'橘',G:'綠',Y:'黃'};
+  Object.entries(anchors).forEach(([c,[r,g,b]])=>{
+    const[h,s,v]=toHSV(r,g,b);
+    dbg.push(anchorNames[c]+' '+c+': rgb('+r+','+g+','+b+') H='+h.toFixed(0)+' S='+s.toFixed(2)+' V='+v.toFixed(2));
+  });
+  dbg.push('');
+  // Per-face sticker details
+  dbg.push('=== 54 色塊 RGB → 分類 ===');
+  FO.forEach(f=>{
+    dbg.push('--- '+FLABEL[f]+' ('+f+') ---');
+    const posNames=['左上','上','右上','左','中','右','左下','下','右下'];
+    for(let i=0;i<9;i++){
+      const s=all.find(x=>x.face===f&&x.pos===i);
+      const[r,g,b]=s.rgb;
+      const[h,sat,v]=toHSV(r,g,b);
+      let line=posNames[i]+' ['+i+']: rgb('+r+','+g+','+b+') H='+h.toFixed(0)+' S='+sat.toFixed(2)+' V='+v.toFixed(2);
+      line+=' → '+CN[s.color]+' ('+s.color+')';
+      if(i!==4 && s.sortedDists){
+        const top3=s.sortedDists.slice(0,3).map(([c,d])=>c+'='+d.toFixed(1)).join(' ');
+        line+=' ['+top3+']';
+        if(s.ambiguity<0.3) line+=' ⚠️模糊!';
+      }
+      dbg.push(line);
+    }
+  });
+  dbg.push('');
+  // Count
+  const cntFinal={W:0,R:0,B:0,O:0,G:0,Y:0};
+  all.forEach(s=>cntFinal[s.color]++);
+  dbg.push('=== 顏色計數 ===');
+  dbg.push(Object.entries(cntFinal).map(([c,n])=>CN[c]+'('+c+')='+n).join(' '));
+  dbg.push('');
+  // Invalid pieces
+  const bp=getInvalidPieces();
+  dbg.push('=== 不合法色塊組合: '+bp.length+'個 ===');
+  bp.forEach(b=>{
+    const cols=b.positions.map(([f,p])=>faceColors[f][p]);
+    const locs=b.positions.map(([f,p])=>f+'['+p+']').join('+');
+    dbg.push(b.type+' '+locs+': '+cols.map(c=>CN[c]).join('-')+' ('+cols.join('-')+')');
+  });
+  dbg.push('');
+  // Auto-fix log
+  dbg.push('=== 自動修正 ===');
+  dbg.push('tryAutoFix: '+(autoFixed?'✅ 成功':'❌ 失敗'));
+
   // Final: actually test CFOP engine
   let engineOk=false;
   if(autoFixed){
@@ -319,18 +381,56 @@ function doClassifyInner(){
       const ts={};FO.forEach(f=>{ts[f]=faceColors[f].slice();});
       const tr=_lbl.cfopEngine(ts),sv=_lbl.solved();engineOk=true;
       FO.forEach(f=>{for(let i=0;i<9;i++){if(tr.state[f][i]!==sv[f][i])engineOk=false;}});
-    }catch(e){engineOk=false;}
+    }catch(e){engineOk=false;dbg.push('引擎例外: '+e.message);}
   }
+  dbg.push('引擎驗證: '+(engineOk?'✅ 可還原':'❌ 無法還原'));
+
+  // Store debug text globally so user can copy
+  window._classifyDebug=dbg.join('\n');
 
   let fl='';FO.forEach(f=>{faceColors[f].forEach(x=>fl+=C2F[x]||'?');});
   const fcnt={};for(const ch of fl)fcnt[ch]=(fcnt[ch]||0)+1;
   const ok2=!fl.includes('?')&&Object.values(fcnt).every(v=>v===9);
+
+  // Show debug panel (always, even on success)
+  function showDebugPanel(){
+    let dp=document.getElementById('debugPanel');
+    if(!dp){
+      dp=document.createElement('div');dp.id='debugPanel';
+      dp.style.cssText='position:fixed;bottom:0;left:0;right:0;max-height:45vh;overflow-y:auto;background:rgba(0,0,0,.95);color:#0f0;font:10px/1.4 monospace;padding:8px;z-index:9999;display:none;border-top:2px solid #FFD700;';
+      document.body.appendChild(dp);
+    }
+    dp.textContent=window._classifyDebug;
+    // Toggle button
+    let tb=document.getElementById('debugToggle');
+    if(!tb){
+      tb=document.createElement('button');tb.id='debugToggle';
+      tb.style.cssText='position:fixed;bottom:4px;right:4px;z-index:10000;background:#333;color:#FFD700;border:1px solid #FFD700;border-radius:4px;padding:4px 8px;font:11px sans-serif;';
+      tb.textContent='🐛 Debug';
+      tb.onclick=function(){
+        const p=document.getElementById('debugPanel');
+        if(p.style.display==='none'){p.style.display='block';tb.style.bottom=(p.offsetHeight+4)+'px';}
+        else{p.style.display='none';tb.style.bottom='4px';}
+      };
+      document.body.appendChild(tb);
+    }
+    // Copy button inside debug panel
+    let cb=document.getElementById('debugCopy');
+    if(!cb){
+      cb=document.createElement('button');cb.id='debugCopy';
+      cb.style.cssText='position:sticky;top:0;background:#FFD700;color:#000;border:none;border-radius:3px;padding:4px 10px;font:11px sans-serif;cursor:pointer;margin-bottom:6px;';
+      cb.textContent='📋 複製除錯資訊';
+      cb.onclick=function(){navigator.clipboard.writeText(window._classifyDebug).then(()=>cb.textContent='✅ 已複製！').catch(()=>{});setTimeout(()=>cb.textContent='📋 複製除錯資訊',1500);};
+      dp.prepend(cb);
+    }
+  }
+  showDebugPanel();
+
   if(!ok2||!engineOk){
-    const bp=getInvalidPieces();
     let msg='<span style="color:#FFA500">顏色辨識可能有誤';
     if(bp.length>0)msg+='（'+bp.length+'個色塊組合不合法）';
     else if(!engineOk)msg+='（引擎無法還原）';
-    msg+='<br>請對照魔方手動修正</span>';
+    msg+='<br>請對照魔方手動修正，或按🐛查看除錯</span>';
     document.getElementById('info').innerHTML=msg;
     showEditableFaces();
     document.getElementById('btnRow').innerHTML='<button class="btn" onclick="doManualSolve()">✅ 確認後解題</button>';
