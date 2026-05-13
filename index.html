@@ -59,7 +59,8 @@ canvas#ov{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:n
  <div style="font-size:24px;font-weight:900;color:#FFD700">魔方小老師</div>
  <div style="font-size:15px;font-weight:800;color:#00D2FF;margin-top:2px">CFOP v3 速解法</div>
  <div style="font-size:13px;color:rgba(255,255,255,.5);margin-top:10px;max-width:280px;text-align:center;line-height:1.6">📸 拍攝6面 → 🧩 CFOP 速解 · 平均72步<br>全程白色朝上！適合初學者</div>
- <button class="btn" style="margin-top:20px;font-size:18px;padding:16px 40px" onclick="startApp()">📸 開始掃描</button>
+ <button class="btn" style="margin-top:20px;font-size:18px;padding:16px 40px" onclick="startApp()">📸 逐面掃描（6張）</button>
+ <button class="btn" style="margin-top:10px;font-size:16px;padding:14px 36px;background:rgba(255,215,0,.2);color:#FFD700;border:1px solid rgba(255,215,0,.4)" onclick="startCornerScan()">🎯 立體掃描（2張）</button>
  <button class="btn btn-sm" style="margin-top:10px;background:rgba(255,255,255,.12);color:#ccc" onclick="startGallery()">🖼️ 從圖庫上傳 6 張照片</button>
  <button class="btn btn-sm" style="margin-top:6px;background:rgba(255,255,255,.08);color:#999;font-size:11px" onclick="startManual()">✏️ 手動輸入顏色</button>
  <input type="file" id="galleryInput" accept="image/*" multiple style="display:none" onchange="handleGalleryFiles(this.files)">
@@ -136,6 +137,258 @@ function startManual(){
   document.getElementById('info').textContent='完成後按下方按鈕';
   showEditableFaces();
   document.getElementById('btnRow').innerHTML='<button class="btn" onclick="doManualSolve()">🧩 LBL 解題！</button>';
+}
+
+// ===== CORNER-SHOT SCAN (2 photos, 3 faces each) =====
+const CORNER_SHOTS = [
+  { id:1, label:'Shot 1', desc:'白色朝上，紅藍角對準鏡頭',
+    faces:['U','F','R'], colors:['#E8E8E8','#D42020','#1E6ED8'],
+    colorLabels:['白(U)','紅(F)','藍(R)'] },
+  { id:2, label:'Shot 2', desc:'翻轉180°，黃色朝上，橘綠角對準鏡頭',
+    faces:['D','B','L'], colors:['#E8D020','#F07010','#18A040'],
+    colorLabels:['黃(D)','橘(B)','綠(L)'] }
+];
+
+// Isometric projection helper: (x,y,z) -> (px,py), scale=1 per sticker unit
+function isoProject(x,y,z){
+  const c30=0.866025,s30=0.5;
+  return [(x-y)*c30, (x+y)*s30-z];
+}
+
+// Build the SVG overlay path for the isometric cube guide
+function buildIsoGuide(cx,cy,cellPx){
+  const S=cellPx; // pixels per cell
+  const lines=[];
+  function p(x,y,z){const[px,py]=isoProject(x*S,y*S,z*S);return[cx+px,cy+py];}
+  // Outer edges (visible 9 of 12)
+  const v=[[0,0,0],[3,0,0],[3,3,0],[0,3,0],[0,0,3],[3,0,3],[3,3,3],[0,3,3]];
+  const edges=[[4,5],[5,6],[4,7],[5,1],[6,2],[7,3],[4,0],[0,1],[0,3]];
+  const outerPaths=edges.map(([a,b])=>{
+    const pa=p(...v[a]),pb=p(...v[b]);
+    return `M${pa[0].toFixed(1)},${pa[1].toFixed(1)}L${pb[0].toFixed(1)},${pb[1].toFixed(1)}`;
+  });
+  // Grid lines: U face (z=3)
+  const gridPaths=[];
+  for(let i=1;i<3;i++){
+    let a=p(i,0,3),b=p(i,3,3);gridPaths.push(`M${a[0].toFixed(1)},${a[1].toFixed(1)}L${b[0].toFixed(1)},${b[1].toFixed(1)}`);
+    a=p(0,i,3);b=p(3,i,3);gridPaths.push(`M${a[0].toFixed(1)},${a[1].toFixed(1)}L${b[0].toFixed(1)},${b[1].toFixed(1)}`);
+  }
+  // F face (y=0)
+  for(let i=1;i<3;i++){
+    let a=p(i,0,0),b=p(i,0,3);gridPaths.push(`M${a[0].toFixed(1)},${a[1].toFixed(1)}L${b[0].toFixed(1)},${b[1].toFixed(1)}`);
+    a=p(0,0,i);b=p(3,0,i);gridPaths.push(`M${a[0].toFixed(1)},${a[1].toFixed(1)}L${b[0].toFixed(1)},${b[1].toFixed(1)}`);
+  }
+  // R face (x=3)
+  for(let i=1;i<3;i++){
+    let a=p(3,i,0),b=p(3,i,3);gridPaths.push(`M${a[0].toFixed(1)},${a[1].toFixed(1)}L${b[0].toFixed(1)},${b[1].toFixed(1)}`);
+    a=p(3,0,i);b=p(3,3,i);gridPaths.push(`M${a[0].toFixed(1)},${a[1].toFixed(1)}L${b[0].toFixed(1)},${b[1].toFixed(1)}`);
+  }
+  // Cell centers for sampling (row,col within each face)
+  // U face: z=3, x=col, y=row (row0=front, row2=back)
+  const uCenters=[];
+  for(let r=0;r<3;r++)for(let c=0;c<3;c++)uCenters.push(p(c+.5,r+.5,3));
+  // F face: y=0, x=col, z=2.5-row (row0=top)
+  const fCenters=[];
+  for(let r=0;r<3;r++)for(let c=0;c<3;c++)fCenters.push(p(c+.5,0,2.5-r));
+  // R face: x=3, y=col, z=2.5-row (row0=top, col0=front)
+  const rCenters=[];
+  for(let r=0;r<3;r++)for(let c=0;c<3;c++)rCenters.push(p(3,c+.5,2.5-r));
+
+  // Face fill polygons for tinted overlay
+  const uPoly=[p(0,0,3),p(3,0,3),p(3,3,3),p(0,3,3)].map(([x,y])=>x.toFixed(1)+','+y.toFixed(1)).join(' ');
+  const fPoly=[p(0,0,0),p(3,0,0),p(3,0,3),p(0,0,3)].map(([x,y])=>x.toFixed(1)+','+y.toFixed(1)).join(' ');
+  const rPoly=[p(3,0,0),p(3,3,0),p(3,3,3),p(3,0,3)].map(([x,y])=>x.toFixed(1)+','+y.toFixed(1)).join(' ');
+
+  return {outerPaths,gridPaths,uCenters,fCenters,rCenters,uPoly,fPoly,rPoly};
+}
+
+let cornerShotIdx=0;
+async function startCornerScan(){
+  document.getElementById('startOv').classList.remove('show');
+  document.getElementById('startOv').style.display='none';
+  vid=document.getElementById('vid');ov=document.getElementById('ov');octx=ov.getContext('2d');
+  try{
+    const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280},height:{ideal:720}}});
+    vid.srcObject=s;await vid.play();
+    ov.width=vid.videoWidth||720;ov.height=vid.videoHeight||1280;
+    cornerShotIdx=0;rawData={};
+    document.getElementById('topBar').style.display='block';
+    document.getElementById('botBar').style.display='block';
+    showCornerShotUI();
+  }catch(e){alert('相機錯誤: '+e.message);}
+}
+
+function showCornerShotUI(){
+  const shot=CORNER_SHOTS[cornerShotIdx];
+  document.getElementById('title').textContent='🎯 '+shot.label;
+  document.getElementById('sub').textContent=shot.desc;
+  document.getElementById('dots').innerHTML=CORNER_SHOTS.map((_,i)=>'<div class="td'+(i<cornerShotIdx?' done':'')+(i===cornerShotIdx?' now':'')+'"></div>').join('');
+  document.getElementById('info').textContent='對齊魔方到引導框，按拍照';
+  document.getElementById('btnRow').innerHTML='<button class="btn" onclick="captureCornerShot()">📸 拍照</button>';
+  // Draw guide overlay
+  drawCornerGuide();
+  if(!window._cornerRAF)window._cornerRAF=requestAnimationFrame(function loop(){drawCornerGuide();window._cornerRAF=requestAnimationFrame(loop);});
+}
+
+function drawCornerGuide(){
+  if(!octx||!vid)return;
+  const w=ov.width,h=ov.height;
+  octx.clearRect(0,0,w,h);
+  const shot=CORNER_SHOTS[cornerShotIdx];
+  // Cell size: use ~18% of min dimension
+  const cellPx=Math.min(w,h)*0.14;
+  const cx=w*0.5, cy=h*0.45;
+  const g=buildIsoGuide(cx,cy,cellPx);
+  // Semi-transparent face fills
+  octx.globalAlpha=0.08;
+  [['uPoly',shot.colors[0]],['fPoly',shot.colors[1]],['rPoly',shot.colors[2]]].forEach(([key,color])=>{
+    const pts=g[key].split(' ').map(s=>{const[x,y]=s.split(',');return[+x,+y];});
+    octx.fillStyle=color;octx.beginPath();pts.forEach(([x,y],i)=>i?octx.lineTo(x,y):octx.moveTo(x,y));octx.closePath();octx.fill();
+  });
+  octx.globalAlpha=1;
+  // Outer edges
+  octx.strokeStyle='rgba(255,255,255,0.9)';octx.lineWidth=2;
+  g.outerPaths.forEach(d=>{const pts=d.replace('M','').split('L').map(s=>{const[x,y]=s.split(',');return[+x,+y];});octx.beginPath();octx.moveTo(pts[0][0],pts[0][1]);octx.lineTo(pts[1][0],pts[1][1]);octx.stroke();});
+  // Grid lines
+  octx.strokeStyle='rgba(255,255,255,0.4)';octx.lineWidth=1;
+  g.gridPaths.forEach(d=>{const pts=d.replace('M','').split('L').map(s=>{const[x,y]=s.split(',');return[+x,+y];});octx.beginPath();octx.moveTo(pts[0][0],pts[0][1]);octx.lineTo(pts[1][0],pts[1][1]);octx.stroke();});
+  // Sampling dots
+  const dotSets=[
+    {centers:g.uCenters,color:shot.colors[0]},
+    {centers:g.fCenters,color:shot.colors[1]},
+    {centers:g.rCenters,color:shot.colors[2]}
+  ];
+  dotSets.forEach(({centers,color})=>{
+    centers.forEach(([x,y],i)=>{
+      octx.fillStyle=i===4?'#FFD700':color;
+      octx.globalAlpha=i===4?1:0.6;
+      octx.beginPath();octx.arc(x,y,i===4?5:3,0,Math.PI*2);octx.fill();
+    });
+  });
+  octx.globalAlpha=1;
+  // Face labels
+  octx.font='bold 14px sans-serif';octx.textAlign='center';
+  const labelPos=[g.uCenters[4],g.fCenters[4],g.rCenters[4]];
+  shot.colorLabels.forEach((lbl,i)=>{
+    const[x,y]=labelPos[i];
+    octx.fillStyle='rgba(0,0,0,0.6)';octx.fillRect(x-22,y+8,44,16);
+    octx.fillStyle='#fff';octx.fillText(lbl,x,y+20);
+  });
+}
+
+function captureCornerShot(){
+  if(window._cornerRAF){cancelAnimationFrame(window._cornerRAF);window._cornerRAF=null;}
+  const shot=CORNER_SHOTS[cornerShotIdx];
+  const w=vid.videoWidth,h=vid.videoHeight;
+  const tc=document.createElement('canvas');tc.width=w;tc.height=h;
+  const tctx=tc.getContext('2d');tctx.drawImage(vid,0,0,w,h);
+  const cellPx=Math.min(w,h)*0.14;
+  const cx=w*0.5,cy=h*0.45;
+  const g=buildIsoGuide(cx,cy,cellPx);
+  // Sample each face's 9 cells
+  const sampleRadius=Math.max(3,Math.round(cellPx*0.12));
+  function sampleAt(px,py){
+    const r=sampleRadius,d=tctx.getImageData(Math.max(0,Math.round(px)-r),Math.max(0,Math.round(py)-r),r*2+1,r*2+1);
+    let rr=0,gg=0,bb=0;for(let i=0;i<d.data.length;i+=4){rr+=d.data[i];gg+=d.data[i+1];bb+=d.data[i+2];}
+    const n=d.data.length/4;return[Math.round(rr/n),Math.round(gg/n),Math.round(bb/n)];
+  }
+  // U/D face (top), F/B face (left), R/L face (right) — no rotation needed!
+  const topFace=shot.faces[0], leftFace=shot.faces[1], rightFace=shot.faces[2];
+  rawData[topFace]=g.uCenters.map(([x,y])=>sampleAt(x,y));
+  rawData[leftFace]=g.fCenters.map(([x,y])=>sampleAt(x,y));
+  rawData[rightFace]=g.rCenters.map(([x,y])=>sampleAt(x,y));
+
+  // Show sampled colors preview
+  const mg=document.getElementById('mgrid');mg.style.display='grid';
+  const allRGB=[...rawData[topFace],...rawData[leftFace],...rawData[rightFace]];
+  mg.style.gridTemplateColumns='repeat(9,1fr)';
+  mg.innerHTML=allRGB.map(([r,g,b],i)=>'<div class="mcell" style="background:rgb('+r+','+g+','+b+')">'+(i%9===4?'⭐':'')+'</div>').join('');
+  document.getElementById('info').textContent='✅ '+shot.label+' 完成！'+shot.faces.join('+')+' 各9格';
+  if(cornerShotIdx<1){
+    document.getElementById('btnRow').innerHTML='<button class="btn" onclick="nextCornerShot()">▶️ 翻轉拍第2面</button><button class="btn" style="margin-top:6px;background:rgba(255,255,255,.12);color:#ccc;font-size:12px;padding:8px 16px" onclick="retakeCornerShot()">🔄 重拍</button>';
+  }else{
+    document.getElementById('btnRow').innerHTML='<button class="btn" onclick="finishCornerScan()">🔍 分析顏色</button><button class="btn" style="margin-top:6px;background:rgba(255,255,255,.12);color:#ccc;font-size:12px;padding:8px 16px" onclick="retakeCornerShot()">🔄 重拍</button>';
+  }
+}
+
+function nextCornerShot(){
+  cornerShotIdx=1;
+  showCornerShotUI();
+}
+
+function retakeCornerShot(){
+  showCornerShotUI();
+}
+
+function finishCornerScan(){
+  // Stop camera
+  if(vid&&vid.srcObject){vid.srcObject.getTracks().forEach(t=>t.stop());vid.style.display='none';}
+  if(window._cornerRAF){cancelAnimationFrame(window._cornerRAF);window._cornerRAF=null;}
+  // Corner-shot data needs NO rotation — sampling coordinates are already in standard orientation
+  scanIdx=6;
+  doClassifyCorner();
+}
+
+function doClassifyCorner(){
+  // The corner-shot samples are already in standard face orientation
+  // (U[0]=UBL corner, F[0]=UFL corner etc. — determined by the isometric guide)
+  // We can go straight to classification without any rot90 correction.
+  // Copy rawData to rd (no rotation needed)
+  try{ doClassifyInnerCorner(); }catch(e){ showError('分析錯誤: '+e.message); }
+}
+
+function doClassifyInnerCorner(){
+  // No rotation needed! The isometric guide already maps to standard positions.
+  const rd={};
+  ['U','R','F','D','L','B'].forEach(f=>{
+    if(rawData[f])rd[f]=rawData[f].map(x=>x.slice?x.slice():[...x]);
+  });
+
+  const FO=['U','R','F','D','L','B'];const all=[];
+  FO.forEach(f=>{const r=rd[f];if(!r)return;for(let i=0;i<9;i++)all.push({face:f,pos:i,rgb:r[i],color:null});});
+  if(all.length!==54){showError('只有'+all.length+'個色塊');return;}
+
+  // Build anchors from centers
+  const anchors={};
+  function _sat(r,g,b){const mx=Math.max(r,g,b);return mx>0?(mx-Math.min(r,g,b))/mx:0;}
+  FO.forEach(f=>{
+    if(f==='U'){
+      // GAN logo fix: pick lowest-saturation among 4 offset samples
+      const center=rd[f][4];
+      const sat=_sat(...center);
+      if(sat>0.3){
+        // Center contaminated by logo, use fallback
+        let bestSat=1,bestRGB=center;
+        rd[f].forEach((rgb,i)=>{if(i===4)return;const s=_sat(...rgb);if(s<bestSat){bestSat=s;bestRGB=rgb;}});
+        anchors[CC[f]]=bestRGB;
+      }else{anchors[CC[f]]=center;}
+    }else{anchors[CC[f]]=rd[f][4];}
+  });
+  all.forEach(s=>{if(s.pos===4)s.color=CC[s.face];});
+
+  // smartDist + auction (same as doClassifyInner)
+  const nonC=all.filter(s=>s.pos!==4);
+  nonC.forEach(s=>{s.dists={};Object.entries(anchors).forEach(([c,[ar,ag,ab]])=>{const[r,g,b]=s.rgb;s.dists[c]=smartDist(r,g,b,ar,ag,ab,c);});});
+  const quota={W:8,R:8,B:8,O:8,G:8,Y:8};
+  nonC.forEach(s=>{let best=null,bestD=Infinity;Object.entries(s.dists).forEach(([c,d])=>{if(d<bestD){bestD=d;best=c;}});s.color=best;});
+  for(let iter=0;iter<200;iter++){
+    const cnt={W:0,R:0,B:0,O:0,G:0,Y:0};nonC.forEach(s=>cnt[s.color]++);
+    const over=Object.keys(cnt).find(c=>cnt[c]>quota[c]);if(!over)break;
+    const inOver=nonC.filter(s=>s.color===over);
+    let bs=null,bc=Infinity;
+    inOver.forEach(s=>{const curD=s.dists[over];Object.entries(s.dists).forEach(([c,d])=>{if(c===over||cnt[c]>=quota[c])return;const p=d-curD;if(p<bc){bc=p;bs={s,to:c};}});});
+    if(bs)bs.s.color=bs.to;
+    else{const under=Object.keys(cnt).find(c=>cnt[c]<quota[c]);if(!under)break;let b2=null,bD2=Infinity;inOver.forEach(s=>{if(s.dists[under]<bD2){bD2=s.dists[under];b2=s;}});if(b2)b2.color=under;else break;}
+  }
+  nonC.forEach(s=>{const sorted=Object.entries(s.dists).sort((a,b)=>a[1]-b[1]);s.sortedDists=sorted;s.bestDist=sorted[0][1];s.secondColor=sorted[1][0];s.secondDist=sorted[1][1];s.ambiguity=s.secondDist>0?(s.secondDist-s.bestDist)/s.secondDist:1;});
+  FO.forEach(f=>{faceColors[f]=all.filter(s=>s.face===f).sort((a,b)=>a.pos-b.pos).map(s=>s.color);});
+
+  // Show results and verify
+  showFacePreviews('mgrid');
+  const cnt={};FO.forEach(f=>faceColors[f].forEach(c=>{cnt[c]=(cnt[c]||0)+1;}));
+  const ok=Object.values(cnt).every(v=>v===9)&&Object.keys(cnt).length===6;
+  if(!ok){showError('每個顏色必須剛好 9 個！目前: '+Object.entries(cnt).map(([c,n])=>CN[c]+':'+n).join(' '));return;}
+  doLBLSolve();
 }
 
 // ===== GALLERY UPLOAD =====
@@ -404,16 +657,19 @@ function doManualSolve(){
 function doClassify(){try{doClassifyInner();}catch(e){showError('分析錯誤: '+e.message);}}
 function doClassifyInner(){
   // === FACE ORIENTATION CORRECTION ===
-  // Scan sequence F→R→D→B→L→U involves tilts/rotations that cause D, B, L
-  // to be photographed rotated relative to their standard orientation.
-  // All three need rot90CCW: camera→standard mapping is [2,5,8,1,4,7,0,3,6]
+  // Scan sequence F→R→D→B→L→U: camera→standard requires rotation correction.
+  // D needs rot90CW, B and L need rot90CCW (verified with fresh canvas sampling).
+  // IMPORTANT: work on a deep copy so rawData stays in camera order (re-runnable)
+  function rot90CW(arr){return[arr[6],arr[3],arr[0],arr[7],arr[4],arr[1],arr[8],arr[5],arr[2]];}
   function rot90CCW(arr){return[arr[2],arr[5],arr[8],arr[1],arr[4],arr[7],arr[0],arr[3],arr[6]];}
-  if(rawData['D'])rawData['D']=rot90CCW(rawData['D']);
-  if(rawData['B'])rawData['B']=rot90CCW(rawData['B']);
-  if(rawData['L'])rawData['L']=rot90CCW(rawData['L']);
+  const rd={};
+  ['U','R','F','D','L','B'].forEach(f=>{if(rawData[f])rd[f]=rawData[f].map(x=>x.slice?x.slice():[...x]);});
+  if(rd['D'])rd['D']=rot90CW(rd['D']);
+  if(rd['B'])rd['B']=rot90CCW(rd['B']);
+  if(rd['L'])rd['L']=rot90CCW(rd['L']);
 
   const FO=['U','R','F','D','L','B'];const all=[];
-  FO.forEach(f=>{const r=rawData[f];if(!r)return;for(let i=0;i<9;i++)all.push({face:f,pos:i,rgb:r[i],color:null});});
+  FO.forEach(f=>{const r=rd[f];if(!r)return;for(let i=0;i<9;i++)all.push({face:f,pos:i,rgb:r[i],color:null});});
   if(all.length!==54){showError('只有'+all.length+'個色塊');return;}
 
   // Build anchors. GAN logo fix: if U center pixel is too saturated or too dark
@@ -2347,5 +2603,5 @@ function prevMove(){if(solveStep<=0)return;undoMoveOnState(solution[solveStep-1]
 (async function(){try{await navigator.wakeLock.request('screen');}catch(e){}})();
 if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(function(){});}
 </script>
-<div id="versionTag">v23-fix7</div>
+<div id="versionTag">v24-corner1</div>
 </body></html>
