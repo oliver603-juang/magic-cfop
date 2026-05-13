@@ -79,12 +79,12 @@ canvas#ov{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:n
 <script>
 // ===== CONSTANTS =====
 const SCAN_SEQ=[
-  {f:'F',name:'前（紅）',guide:'上白朝天，前紅對鏡頭'},
-  {f:'R',name:'右（藍）',guide:'順時針轉90°，右藍對鏡頭'},
-  {f:'B',name:'後（橘）',guide:'再轉90°，後橘對鏡頭'},
-  {f:'L',name:'左（綠）',guide:'再轉90°，左綠對鏡頭'},
-  {f:'U',name:'上（白）',guide:'轉回前紅，往前傾，上白對鏡頭'},
-  {f:'D',name:'下（黃）',guide:'往後傾180°，下黃對鏡頭'},
+  {f:'F',name:'❶ 前紅',guide:'白色朝上，紅色面對鏡頭'},
+  {f:'R',name:'❷ 右藍',guide:'整顆左轉 90°（藍色面對鏡頭）'},
+  {f:'D',name:'❸ 下黃',guide:'整顆往上翻 90°（黃色面對鏡頭）'},
+  {f:'B',name:'❹ 後橘',guide:'整顆左轉 90°（橘色面對鏡頭）'},
+  {f:'L',name:'❺ 左綠',guide:'整顆往上翻 90°（綠色面對鏡頭）'},
+  {f:'U',name:'❻ 上白',guide:'整顆左轉 90°（白色面對鏡頭）'},
 ];
 const CMAP={W:'#FFFFFF',R:'#B71234',B:'#0046AD',O:'#FF5800',G:'#009B48',Y:'#FFD500'};
 const CC={F:'R',R:'B',B:'O',L:'G',U:'W',D:'Y'};
@@ -142,6 +142,22 @@ function startManual(){
   showEditableFaces();
   document.getElementById('btnRow').innerHTML='<button class="btn" onclick="doManualSolve()">🧩 LBL 解題！</button>';
 }
+function retakeCurrent(){
+  // Re-show the scan UI for the current face (don't advance scanIdx)
+  showScanUI();
+}
+function acceptAndContinue(){
+  // Accept the bad scan and advance
+  scanIdx++;
+  if(scanIdx>=SCAN_SEQ.length){
+    document.getElementById('title').textContent='✅ 6面拍攝完成！';
+    document.getElementById('sub').textContent='按下方按鈕分析顏色';
+    document.getElementById('info').textContent='';
+    document.getElementById('btnRow').innerHTML='<button class="btn" onclick="doClassify()">🔍 分析顏色</button>';
+  }else{
+    showScanUI();
+  }
+}
 function showScanUI(){
   const info=SCAN_SEQ[scanIdx];
   document.getElementById('title').textContent=info.name;
@@ -156,8 +172,8 @@ function showScanUI(){
 function drawGuideGrid(){
   if(!ov||!ov.width)return;
   const vw=ov.width,vh=ov.height;octx.clearRect(0,0,vw,vh);
-  const gs=Math.min(vw,vh)*0.82,cs=gs/3,sx=(vw-gs)/2,sy=(vh-gs)/2;
-  octx.fillStyle='rgba(0,0,0,.25)';
+  const gs=Math.min(vw,vh)*0.68,cs=gs/3,sx=(vw-gs)/2,sy=(vh-gs)/2;
+  octx.fillStyle='rgba(0,0,0,.75)';
   octx.fillRect(0,0,vw,sy);octx.fillRect(0,sy+gs,vw,vh-sy-gs);octx.fillRect(0,sy,sx,gs);octx.fillRect(sx+gs,sy,vw-sx-gs,gs);
   octx.strokeStyle='rgba(255,215,0,.5)';octx.lineWidth=1.5;
   for(let i=0;i<=3;i++){octx.beginPath();octx.moveTo(sx+i*cs,sy);octx.lineTo(sx+i*cs,sy+gs);octx.stroke();octx.beginPath();octx.moveTo(sx,sy+i*cs);octx.lineTo(sx+gs,sy+i*cs);octx.stroke();}
@@ -168,15 +184,16 @@ function doScanCapture(){
   if(!vid.videoWidth)return;
   const vw=vid.videoWidth,vh=vid.videoHeight,tc=document.createElement('canvas');tc.width=vw;tc.height=vh;
   const tctx=tc.getContext('2d');tctx.drawImage(vid,0,0,vw,vh);
-  const gs=Math.min(vw,vh)*0.82,cs=gs/3,sx=(vw-gs)/2,sy=(vh-gs)/2;
+  // Shrunk from 82% to 68% — avoids fingers/edges being sampled
+  const gs=Math.min(vw,vh)*0.68,cs=gs/3,sx=(vw-gs)/2,sy=(vh-gs)/2;
   let rgbs=[];
   const isUface=SCAN_SEQ[scanIdx].f==='U';
   for(let r=0;r<3;r++)for(let c=0;c<3;c++){
     const px=Math.round(sx+(c+.5)*cs),py=Math.round(sy+(r+.5)*cs);
     const isCenter=(r===1&&c===1);
     if(isUface&&isCenter){
-      // GAN logo avoidance: sample 4 offset points around center (skip the logo)
-      const off=Math.round(cs*0.3); // ~30% of cell size away from center
+      // GAN logo avoidance: sample 4 offset points around center
+      const off=Math.round(cs*0.3);
       const pts=[[px-off,py],[px+off,py],[px,py-off],[px,py+off]];
       let rr=0,gg=0,bb=0,total=0;
       pts.forEach(([ppx,ppy])=>{
@@ -190,6 +207,26 @@ function doScanCapture(){
       for(let i=0;i<d.data.length;i+=4){rr+=d.data[i];gg+=d.data[i+1];bb+=d.data[i+2];}
       const n=d.data.length/4;rgbs.push([Math.round(rr/n),Math.round(gg/n),Math.round(bb/n)]);
     }
+  }
+  // Check for occluded/bad pixels (too dark = finger/shadow)
+  let badCells=[];
+  rgbs.forEach(([r,g,b],i)=>{
+    const v=Math.max(r,g,b)/255;
+    if(v<0.25)badCells.push(i);
+  });
+  if(badCells.length>0){
+    // Warn but still save — user can retake
+    if(navigator.vibrate)navigator.vibrate([100,50,100]);
+    const mg=document.getElementById('mgrid');mg.style.display='grid';
+    mg.innerHTML=rgbs.map(([r,g,b],i)=>{
+      const bad=badCells.includes(i);
+      return '<div class="mcell" style="background:rgb('+r+','+g+','+b+')">'+(bad?'❌':(i===4?'⭐':''))+'</div>';
+    }).join('');
+    document.getElementById('info').innerHTML='<span style="color:#E94560">⚠️ '+badCells.length+'格被遮擋（太暗），請重新對齊拍照</span>';
+    document.getElementById('btnRow').innerHTML='<button class="btn" onclick="retakeCurrent()">🔄 重拍此面</button><button class="btn btn-sm" style="margin-top:6px;background:rgba(255,255,255,.12);color:#ccc" onclick="acceptAndContinue()">仍要繼續</button>';
+    // Store temporarily — retake will overwrite
+    rawData[SCAN_SEQ[scanIdx].f]=rgbs;
+    return;
   }
   rawData[SCAN_SEQ[scanIdx].f]=rgbs;
   if(navigator.vibrate)navigator.vibrate(80);
@@ -289,16 +326,23 @@ function doClassifyInner(){
     }
     // Chromatic anchor but sticker is near-white: high penalty
     if(s<0.15)return 30+((0.15-s)/0.15)*20;
-    // Hue-based distance
+    // Hue distance
     let hd=Math.abs(h-ah);hd=Math.min(hd,360-hd);
-    // Special R vs O separation: use (G-B) difference — best discriminator
-    // Orange: G-B ≈ 50~70, Red: G-B ≈ -10~+5
-    const bothWarm=(h>300||h<50)&&(ah>300||ah<50);
-    if(bothWarm){
-      const gb=g-b, agb=ag-ab; // G-B difference
-      return Math.abs(gb-agb)*3+Math.abs(v-av)*30+hd*0.3;
+    // R/O zone: both sticker AND anchor hue in red-orange range (H>300 or H<45)
+    // Use G-B difference as primary discriminator (best for R vs O)
+    const stickerRO=(h>300||h<45);
+    const anchorRO=(ah>300||ah<45);
+    if(stickerRO&&anchorRO){
+      const gb=g-b, agb=ag-ab;
+      return Math.abs(gb-agb)*1.5+Math.abs(v-av)*30+hd*0.3;
     }
-    return hd+Math.abs(v-av)*30+Math.abs(s-as)*10;
+    // Zone mismatch penalty: warm sticker (R/O) vs non-warm anchor (Y/G/B)
+    // General formula for everything else (Y, G, B, and cross-zone comparisons)
+    let dist=hd+Math.abs(v-av)*30+Math.abs(s-as)*10;
+    // Warm sticker (H<45, in R/O zone) vs Y anchor: add penalty
+    // Orange H≈20 should NOT be close to Yellow H≈60
+    if(c==='Y'&&(h<45&&!(h>300))){dist+=(45-h)*2;}
+    return dist;
   }
 
   const nonC=all.filter(s=>s.pos!==4);
