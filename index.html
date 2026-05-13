@@ -463,6 +463,127 @@ function doClassifyInner(){
   dbg.push('=== 自動修正 ===');
   dbg.push('tryAutoFix: '+(autoFixed?'✅ 成功':'❌ 失敗'));
 
+  // === PARITY & PIECE DIAGNOSTICS ===
+  dbg.push('');
+  dbg.push('=== 拓撲診斷 ===');
+  // Edge pieces
+  const edgePieces=EDGE_POS.map(([f1,p1,f2,p2])=>[faceColors[f1][p1],faceColors[f2][p2]]);
+  const edgeSorted=edgePieces.map(e=>[...e].sort().join(''));
+  const edgeUniq=new Set(edgeSorted);
+  const edgeDup=edgeSorted.filter((e,i)=>edgeSorted.indexOf(e)!==i);
+  dbg.push('邊塊: '+edgeUniq.size+'/12 不重複'+(edgeUniq.size===12?' ✅':' ❌'));
+  if(edgeDup.length>0)dbg.push('  重複邊塊: '+[...new Set(edgeDup)].join(', '));
+  // Corner pieces
+  const cornerPieces=CORNER_POS.map(([f1,p1,f2,p2,f3,p3])=>[faceColors[f1][p1],faceColors[f2][p2],faceColors[f3][p3]]);
+  const cornerSorted=cornerPieces.map(c=>[...c].sort().join(''));
+  const cornerUniq=new Set(cornerSorted);
+  const cornerDup=cornerSorted.filter((c,i)=>cornerSorted.indexOf(c)!==i);
+  dbg.push('角塊: '+cornerUniq.size+'/8 不重複'+(cornerUniq.size===8?' ✅':' ❌'));
+  if(cornerDup.length>0)dbg.push('  重複角塊: '+[...new Set(cornerDup)].join(', '));
+  // Missing standard pieces
+  const stdEdges=['BG','BO','BR','BW','GO','GR','GW','GY','OW','OY','RW','RY'].sort();
+  const stdCorners=['BGO','BGY','BOR','BOW','BRW','BRY','GOW','GRW','GRY','GOY'].sort();
+  // Actually compute correct standard pieces
+  const colors6=['W','R','B','O','G','Y'];const opp2={W:'Y',Y:'W',R:'O',O:'R',B:'G',G:'B'};
+  const legalEdgeSet=new Set();
+  for(let i=0;i<6;i++)for(let j=i+1;j<6;j++){if(opp2[colors6[i]]!==colors6[j])legalEdgeSet.add([colors6[i],colors6[j]].sort().join(''));}
+  const legalCornerSet=new Set();
+  for(let i=0;i<6;i++)for(let j=i+1;j<6;j++)for(let k=j+1;k<6;k++){const a=colors6[i],b=colors6[j],c=colors6[k];if(opp2[a]!==b&&opp2[a]!==c&&opp2[b]!==c)legalCornerSet.add([a,b,c].sort().join(''));}
+  const missingE=[...legalEdgeSet].filter(e=>!edgeSorted.includes(e));
+  const extraE=[...edgeUniq].filter(e=>!legalEdgeSet.has(e));
+  if(missingE.length>0)dbg.push('  缺少邊塊: '+missingE.join(', '));
+  if(extraE.length>0)dbg.push('  非法邊塊: '+extraE.join(', '));
+  const missingC=[...legalCornerSet].filter(c=>!cornerSorted.includes(c));
+  const extraC=[...cornerUniq].filter(c=>!legalCornerSet.has(c));
+  if(missingC.length>0)dbg.push('  缺少角塊: '+missingC.join(', '));
+  if(extraC.length>0)dbg.push('  非法角塊: '+extraC.join(', '));
+
+  // Parity check
+  let cornerOrientSum=0;
+  CORNER_POS.forEach(([f1,p1,f2,p2,f3,p3])=>{
+    const c1=faceColors[f1][p1];
+    if(c1==='W'||c1==='Y')cornerOrientSum+=0;
+    else{const c2=faceColors[f2][p2];if(c2==='W'||c2==='Y')cornerOrientSum+=1;else cornerOrientSum+=2;}
+  });
+  let edgeOrientSum=0;
+  EDGE_POS.forEach(([f1,p1,f2,p2])=>{
+    const c1=faceColors[f1][p1];
+    if(f1==='U'||f1==='D') edgeOrientSum+=(c1==='W'||c1==='Y')?0:1;
+    else edgeOrientSum+=(c1==='R'||c1==='O')?0:1;
+  });
+  const cMod3=cornerOrientSum%3, eMod2=edgeOrientSum%2;
+  dbg.push('角塊朝向 mod 3 = '+cMod3+(cMod3===0?' ✅':' ❌'));
+  dbg.push('邊塊翻轉 mod 2 = '+eMod2+(eMod2===0?' ✅':' ❌'));
+
+  // If parity fails, try single-face rotations to diagnose
+  if(cMod3!==0||eMod2!==0||extraE.length>0||extraC.length>0){
+    dbg.push('');
+    dbg.push('=== 面方向自動診斷 ===');
+    const transforms={
+      '順90°':f=>[f[6],f[3],f[0],f[7],f[4],f[1],f[8],f[5],f[2]],
+      '逆90°':f=>[f[2],f[5],f[8],f[1],f[4],f[7],f[0],f[3],f[6]],
+      '180°':f=>[f[8],f[7],f[6],f[5],f[4],f[3],f[2],f[1],f[0]],
+      '左右鏡像':f=>[f[2],f[1],f[0],f[5],f[4],f[3],f[8],f[7],f[6]],
+      '上下鏡像':f=>[f[6],f[7],f[8],f[3],f[4],f[5],f[0],f[1],f[2]],
+    };
+    let foundFix=false;
+    // Try single face
+    FO.forEach(face=>{
+      Object.entries(transforms).forEach(([tName,tFn])=>{
+        const testFC=JSON.parse(JSON.stringify(faceColors));
+        testFC[face]=tFn(testFC[face]);
+        // Check parity
+        let tCS=0;
+        CORNER_POS.forEach(([f1,p1,f2,p2,f3,p3])=>{
+          const c1=testFC[f1][p1];if(c1==='W'||c1==='Y')tCS+=0;else{const c2=testFC[f2][p2];if(c2==='W'||c2==='Y')tCS+=1;else tCS+=2;}
+        });
+        let tES=0;
+        EDGE_POS.forEach(([f1,p1,f2,p2])=>{
+          const c1=testFC[f1][p1];if(f1==='U'||f1==='D')tES+=(c1==='W'||c1==='Y')?0:1;else tES+=(c1==='R'||c1==='O')?0:1;
+        });
+        // Check pieces
+        const tEdges=EDGE_POS.map(([f1,p1,f2,p2])=>[testFC[f1][p1],testFC[f2][p2]]);
+        let tBadE=0;tEdges.forEach(([a,b])=>{if(a===b||opp2[a]===b)tBadE++;});
+        const tCorners=CORNER_POS.map(([f1,p1,f2,p2,f3,p3])=>[testFC[f1][p1],testFC[f2][p2],testFC[f3][p3]]);
+        let tBadC=0;tCorners.forEach(cs=>{for(let i=0;i<3;i++)for(let j=i+1;j<3;j++)if(cs[i]===cs[j]||opp2[cs[i]]===cs[j])tBadC++;});
+        if(tCS%3===0 && tES%2===0 && tBadE===0 && tBadC===0){
+          // Also try engine
+          let engOk=false;
+          try{const ts2={};FO.forEach(f2=>{ts2[f2]=testFC[f2].slice();});const tr2=_lbl.cfopEngine(ts2),sv2=_lbl.solved();engOk=true;FO.forEach(f2=>{for(let i=0;i<9;i++){if(tr2.state[f2][i]!==sv2[f2][i])engOk=false;}});}catch(e2){engOk=false;}
+          dbg.push('💡 '+face+'面 '+tName+' → parity ✅ 引擎'+(engOk?'✅':'❌'));
+          foundFix=true;
+        }
+      });
+    });
+    // Try double face
+    if(!foundFix){
+      for(let i=0;i<FO.length&&!foundFix;i++){
+        for(let j=i+1;j<FO.length&&!foundFix;j++){
+          Object.entries(transforms).forEach(([t1,fn1])=>{
+            Object.entries(transforms).forEach(([t2,fn2])=>{
+              if(foundFix)return;
+              const testFC=JSON.parse(JSON.stringify(faceColors));
+              testFC[FO[i]]=fn1(testFC[FO[i]]);testFC[FO[j]]=fn2(testFC[FO[j]]);
+              let tCS=0;CORNER_POS.forEach(([f1,p1,f2,p2,f3,p3])=>{const c1=testFC[f1][p1];if(c1==='W'||c1==='Y')tCS+=0;else{const c2=testFC[f2][p2];if(c2==='W'||c2==='Y')tCS+=1;else tCS+=2;}});
+              let tES=0;EDGE_POS.forEach(([f1,p1,f2,p2])=>{const c1=testFC[f1][p1];if(f1==='U'||f1==='D')tES+=(c1==='W'||c1==='Y')?0:1;else tES+=(c1==='R'||c1==='O')?0:1;});
+              const tEdges=EDGE_POS.map(([f1,p1,f2,p2])=>[testFC[f1][p1],testFC[f2][p2]]);
+              let tBadE=0;tEdges.forEach(([a,b])=>{if(a===b||opp2[a]===b)tBadE++;});
+              const tCorners=CORNER_POS.map(([f1,p1,f2,p2,f3,p3])=>[testFC[f1][p1],testFC[f2][p2],testFC[f3][p3]]);
+              let tBadC=0;tCorners.forEach(cs=>{for(let ii=0;ii<3;ii++)for(let jj=ii+1;jj<3;jj++)if(cs[ii]===cs[jj]||opp2[cs[ii]]===cs[jj])tBadC++;});
+              if(tCS%3===0&&tES%2===0&&tBadE===0&&tBadC===0){
+                let engOk=false;
+                try{const ts2={};FO.forEach(f2=>{ts2[f2]=testFC[f2].slice();});const tr2=_lbl.cfopEngine(ts2),sv2=_lbl.solved();engOk=true;FO.forEach(f2=>{for(let i2=0;i2<9;i2++){if(tr2.state[f2][i2]!==sv2[f2][i2])engOk=false;}});}catch(e2){engOk=false;}
+                dbg.push('💡 '+FO[i]+'面'+t1+' + '+FO[j]+'面'+t2+' → parity ✅ 引擎'+(engOk?'✅':'❌'));
+                foundFix=true;
+              }
+            });
+          });
+        }
+      }
+    }
+    if(!foundFix)dbg.push('❌ 無法透過單面/雙面變換修復');
+  }
+
   // Final: actually test CFOP engine
   let engineOk=false;
   if(autoFixed){
