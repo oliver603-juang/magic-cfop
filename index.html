@@ -282,11 +282,22 @@ function doClassifyInner(){
   }
   function smartDist(r,g,b,ar,ag,ab,c){
     const[h,s,v]=toHSV(r,g,b);const[ah,as,av]=toHSV(ar,ag,ab);
-    if(c==='W'){if(s<0.18)return(1-v)*3+s*8;return 10+s*20;}
-    if(s<0.12)return 15;
+    // White: low saturation = good match; high saturation = very high penalty
+    if(c==='W'){
+      if(s<0.20)return(1-v)*3+s*10;
+      return 30+s*100;
+    }
+    // Chromatic anchor but sticker is near-white: high penalty
+    if(s<0.15)return 30+((0.15-s)/0.15)*20;
+    // Hue-based distance
     let hd=Math.abs(h-ah);hd=Math.min(hd,360-hd);
-    const inRO=(h>300||h<50)&&(ah>300||ah<50);
-    if(inRO){const gR=g/(r+1),aGR=ag/(ar+1);return Math.abs(gR-aGR)*200+Math.abs(v-av)*30+hd*0.3;}
+    // Special R vs O separation: use (G-B) difference — best discriminator
+    // Orange: G-B ≈ 50~70, Red: G-B ≈ -10~+5
+    const bothWarm=(h>300||h<50)&&(ah>300||ah<50);
+    if(bothWarm){
+      const gb=g-b, agb=ag-ab; // G-B difference
+      return Math.abs(gb-agb)*3+Math.abs(v-av)*30+hd*0.3;
+    }
     return hd+Math.abs(v-av)*30+Math.abs(s-as)*10;
   }
 
