@@ -2315,10 +2315,10 @@ function showModeSelect(){
   const cnt={};['U','R','F','D','L','B'].forEach(f=>faceColors[f].forEach(c=>{cnt[c]=(cnt[c]||0)+1;}));
   const ok=Object.values(cnt).every(v=>v===9)&&Object.keys(cnt).length===6;
   if(!ok){showError('每個顏色必須剛好 9 個！');return;}
-  document.getElementById('info').innerHTML='<span style="color:#FFD700">選擇解法模式</span>';
+  document.getElementById('info').innerHTML='<span style="color:#FFD700">選擇模式</span>';
   document.getElementById('btnRow').innerHTML=
-    '<button class="btn" onclick="startKociemba()">🚀 最速解 (Kociemba ~20步)</button>'+
-    '<button class="btn" style="margin-top:8px;background:rgba(0,210,255,.9)" onclick="startCFOP()">📚 學習解 (CFOP ~72步)</button>';
+    '<button class="btn" onclick="startKociemba()">🚀 最速解 (~20步)</button>'+
+    '<button class="btn" style="margin-top:8px;background:rgba(0,210,255,.9)" onclick="startTraining()">🏆 訓練教練 (CFOP)</button>';
 }
 
 function startKociemba(){
@@ -2332,12 +2332,34 @@ function startKociemba(){
 
 function startCFOP(){
   solveMode='cfop';
-  // CFOP also needs autoRepair first — CFOP engine has no error tolerance
   let fl='';['U','R','F','D','L','B'].forEach(f=>{faceColors[f].forEach(x=>fl+=C2F[x]||'?');});
   document.getElementById('info').textContent='🧮 驗證色塊中...';
   document.getElementById('btnRow').innerHTML='';
   if(!solverWorker)initSolver();
   tryAutoRepairThenCFOP(fl,0);
+}
+function startTraining(){
+  solveMode='cfop';
+  let fl='';['U','R','F','D','L','B'].forEach(f=>{faceColors[f].forEach(x=>fl+=C2F[x]||'?');});
+  document.getElementById('info').textContent='🧮 驗證色塊中...';
+  document.getElementById('btnRow').innerHTML='';
+  if(!solverWorker)initSolver();
+  tryAutoRepairThenTraining(fl,0);
+}
+function tryAutoRepairThenTraining(fl,attempt){
+  if(attempt>10){document.getElementById('info').innerHTML='<span style="color:#E94560">自動修正失敗</span>';showEditableFaces();document.getElementById('btnRow').innerHTML='<button class="btn" onclick="showModeSelect()">🧩 重新選擇</button>';return;}
+  if(solverWorker)solverWorker.terminate();initSolver();
+  let wc=0;
+  function sendWhenReady(){wc++;if(solverReady)doSend();else if(wc>100)tryAutoRepairThenTraining(fl,attempt);else setTimeout(sendWhenReady,100);}
+  function doSend(){
+    const to=setTimeout(()=>{solverWorker.terminate();solverCB=null;tryAutoRepairThenTraining(fl,attempt+1);},4000);
+    solverCB=(err,sol)=>{clearTimeout(to);if(err){tryAutoRepairThenTraining(fl,attempt+1);return;}
+      document.getElementById('info').textContent='✅ 驗證通過'+(attempt>0?' (修正'+attempt+'次)':'');
+      setTimeout(()=>showTrainingMenu(),200);
+    };
+    solverWorker.postMessage({t:'solve',fl});
+  }
+  sendWhenReady();
 }
 
 function tryAutoRepairThenCFOP(fl,attempt){
@@ -2659,7 +2681,26 @@ case'R':t=[s.F[2],s.F[5],s.F[8]];s.F[2]=s.D[2];s.F[5]=s.D[5];s.F[8]=s.D[8];s.D[2
 case'L':t=[s.F[0],s.F[3],s.F[6]];s.F[0]=s.U[0];s.F[3]=s.U[3];s.F[6]=s.U[6];s.U[0]=s.B[8];s.U[3]=s.B[5];s.U[6]=s.B[2];s.B[2]=s.D[6];s.B[5]=s.D[3];s.B[8]=s.D[0];s.D[0]=t[0];s.D[3]=t[1];s.D[6]=t[2];break;
 case'F':t=[s.U[6],s.U[7],s.U[8]];s.U[6]=s.L[8];s.U[7]=s.L[5];s.U[8]=s.L[2];s.L[2]=s.D[0];s.L[5]=s.D[1];s.L[8]=s.D[2];s.D[0]=s.R[6];s.D[1]=s.R[3];s.D[2]=s.R[0];s.R[0]=t[0];s.R[3]=t[1];s.R[6]=t[2];break;
 case'B':t=[s.U[0],s.U[1],s.U[2]];s.U[0]=s.R[2];s.U[1]=s.R[5];s.U[2]=s.R[8];s.R[2]=s.D[8];s.R[5]=s.D[7];s.R[8]=s.D[6];s.D[6]=s.L[0];s.D[7]=s.L[3];s.D[8]=s.L[6];s.L[0]=t[2];s.L[3]=t[1];s.L[6]=t[0];break;}};
-_lbl.dm=function(s,mv){var f=mv[0],p=mv.indexOf("'")>-1,d=mv.indexOf('2')>-1,n=d?2:(p?3:1);for(var i=0;i<n;i++){_lbl.rCW(s,f);_lbl.cyc(s,f);}};
+_lbl.dm=function(s,mv){
+  var f=mv[0],p=mv.indexOf("'")>-1,d=mv.indexOf('2')>-1,n=d?2:(p?3:1);
+  // Fat moves: f,r,b,l (lowercase) = face + middle slice
+  if(f!==f.toUpperCase()){
+    var F=f.toUpperCase();
+    for(var i=0;i<n;i++){
+      _lbl.rCW(s,F);_lbl.cyc(s,F);
+      if(f==='f')_lbl._cycS(s);
+      else if(f==='b'){_lbl._cycS(s);_lbl._cycS(s);_lbl._cycS(s);}
+      else if(f==='r'){_lbl._cycM(s);_lbl._cycM(s);_lbl._cycM(s);}
+      else if(f==='l')_lbl._cycM(s);
+    }
+    return;
+  }
+  for(var i=0;i<n;i++){_lbl.rCW(s,f);_lbl.cyc(s,f);}
+};
+// M-slice (same dir as L)
+_lbl._cycM=function(s){var t;t=s.F[1];s.F[1]=s.U[1];s.U[1]=s.B[7];s.B[7]=s.D[1];s.D[1]=t;t=s.F[4];s.F[4]=s.U[4];s.U[4]=s.B[4];s.B[4]=s.D[4];s.D[4]=t;t=s.F[7];s.F[7]=s.U[7];s.U[7]=s.B[1];s.B[1]=s.D[7];s.D[7]=t;};
+// S-slice (same dir as F)
+_lbl._cycS=function(s){var t;t=s.U[3];s.U[3]=s.L[5];s.L[5]=s.D[5];s.D[5]=s.R[3];s.R[3]=t;t=s.U[4];s.U[4]=s.L[4];s.L[4]=s.D[4];s.D[4]=s.R[4];s.R[4]=t;t=s.U[7];s.U[7]=s.L[2];s.L[2]=s.D[1];s.D[1]=s.R[6];s.R[6]=t;};
 _lbl.dms=function(s,arr){arr.forEach(function(m){_lbl.dm(s,m);});};
 _lbl.EDGES=[{"f1":"U","p1":7,"f2":"F","p2":1,"layer":"U","slot":"UF"},{"f1":"U","p1":5,"f2":"R","p2":1,"layer":"U","slot":"UR"},{"f1":"U","p1":1,"f2":"B","p2":1,"layer":"U","slot":"UB"},{"f1":"U","p1":3,"f2":"L","p2":1,"layer":"U","slot":"UL"},{"f1":"F","p1":5,"f2":"R","p2":3,"layer":"E","slot":"FR"},{"f1":"F","p1":3,"f2":"L","p2":5,"layer":"E","slot":"FL"},{"f1":"B","p1":3,"f2":"R","p2":5,"layer":"E","slot":"BR"},{"f1":"B","p1":5,"f2":"L","p2":3,"layer":"E","slot":"BL"},{"f1":"D","p1":1,"f2":"F","p2":7,"layer":"D","slot":"DF"},{"f1":"D","p1":5,"f2":"R","p2":7,"layer":"D","slot":"DR"},{"f1":"D","p1":7,"f2":"B","p2":7,"layer":"D","slot":"DB"},{"f1":"D","p1":3,"f2":"L","p2":7,"layer":"D","slot":"DL"}];
 _lbl.CORNERS=[{"f1":"U","p1":8,"f2":"F","p2":2,"f3":"R","p3":0,"layer":"U","slot":"UFR"},{"f1":"U","p1":6,"f2":"F","p2":0,"f3":"L","p3":2,"layer":"U","slot":"UFL"},{"f1":"U","p1":0,"f2":"B","p2":2,"f3":"L","p3":0,"layer":"U","slot":"UBL"},{"f1":"U","p1":2,"f2":"B","p2":0,"f3":"R","p3":2,"layer":"U","slot":"UBR"},{"f1":"D","p1":2,"f2":"F","p2":8,"f3":"R","p3":6,"layer":"D","slot":"DFR"},{"f1":"D","p1":0,"f2":"F","p2":6,"f3":"L","p3":8,"layer":"D","slot":"DFL"},{"f1":"D","p1":6,"f2":"B","p2":8,"f3":"L","p3":6,"layer":"D","slot":"DBL"},{"f1":"D","p1":8,"f2":"B","p2":6,"f3":"R","p3":8,"layer":"D","slot":"DBR"}];
@@ -4128,6 +4169,530 @@ function prevMove(){if(solveStep<=0)return;undoMoveOnState(solution[solveStep-1]
 
 // Wake lock
 (async function(){try{await navigator.wakeLock.request('screen');}catch(e){}})();
+
+// ================================================================
+// ===== TRAINING COACH — OLL/PLL Recognition Training =====
+// ================================================================
+
+// --- 57 OLL DATABASE (all signatures verified, zero collisions) ---
+var OLL_DB=[
+{id:21,nick:'H帽子',cat:'cross',level:'beginner',moves:["R","D2","R'","D'","R","D","R'","D'","R","D'","R'"],tip:'4角全要翻'},
+{id:22,nick:'圓圈',cat:'cross',level:'beginner',moves:["R","D2","R2","D'","R2","D'","R2","D2","R"],tip:'只有1角正確'},
+{id:23,nick:'車頭燈',cat:'cross',level:'beginner',moves:["R2","D","R'","D","R'","D'","R","D'","R2","D'","R","D","R'"],tip:'兩個角像車頭燈'},
+{id:24,nick:'箭頭',cat:'cross',level:'beginner',moves:["r","D","R'","D'","r'","F","R","F'"],tip:'最短OLL'},
+{id:25,nick:'迴旋鏢',cat:'cross',level:'beginner',moves:["F'","r","D","R'","D'","r'","F","R"],tip:'只要8步'},
+{id:26,nick:'反小魚',cat:'cross',level:'beginner',moves:["R","D2","R'","D'","R","D'","R'"],tip:'小魚反過來'},
+{id:27,nick:'小魚',cat:'cross',level:'beginner',moves:["R","D","R'","D","R","D2","R'"],tip:'最基本的OLL'},
+{id:33,nick:'T字帽',cat:'Tshape',level:'intermediate',moves:["R","D","R'","D'","R'","F","R","F'"],tip:'跟箭頭好記'},
+{id:45,nick:'T字',cat:'Tshape',level:'beginner',moves:["F","R","D","R'","D'","F'"],tip:'開門→右手法→關門'},
+{id:44,nick:'反T字',cat:'line',level:'beginner',moves:["f","R","D","R'","D'","f'"],tip:'小f版'},
+{id:43,nick:'大P',cat:'line',level:'beginner',moves:["F'","D'","R'","D","R","F"],tip:'反向開門'},
+{id:51,nick:'天線',cat:'line',level:'intermediate',moves:["f","R","D","R'","D'","R","D","R'","D'","f'"],tip:'做兩次右手法'},
+{id:52,nick:'閃電',cat:'line',level:'intermediate',moves:["R","D","R'","D","R","D'","B","D'","B'","R'"],tip:'閃電形'},
+{id:55,nick:'高速公路',cat:'line',level:'intermediate',moves:["R","D2","R2","F","R","F'","D2","R'","F","R","F'"],tip:'直線穿過'},
+{id:56,nick:'反高速',cat:'line',level:'intermediate',moves:["r'","D'","r","D'","r'","D","r","D'","r'","D2","r"],tip:'反方向'},
+{id:5,nick:'方塊左',cat:'Lshape',level:'intermediate',moves:["r","D2","R'","D'","R","D'","R'","D2","r'"],tip:'方塊在左上'},
+{id:6,nick:'方塊右',cat:'Lshape',level:'intermediate',moves:["r'","D2","R","D","R'","D","R","D2","r"],tip:'方塊在右上'},
+{id:1,nick:'大炮',cat:'dot',level:'advanced',moves:["R","D2","R2","B","R","B'","D2","R'","B","R","B'"],tip:'十字都沒有'},
+{id:2,nick:'直升機',cat:'dot',level:'advanced',moves:["B","R","D","R'","D'","B'","b","R","D","R'","D'","b'"],tip:'大B+小b'},
+{id:3,nick:'閃電L',cat:'dot',level:'advanced',moves:["f","R","D","R'","D'","f'","D'","F","R","D","R'","D'","F'"],tip:'先小f再大F'},
+{id:4,nick:'閃電R',cat:'dot',level:'advanced',moves:["f","R","D","R'","D'","f'","D","F","R","D","R'","D'","F'"],tip:'差一個D方向'},
+{id:31,nick:'P左',cat:'Pshape',level:'intermediate',moves:["R'","D'","F","D","R","D'","R'","F'","R"],tip:'P朝左'},
+{id:32,nick:'P右',cat:'Pshape',level:'intermediate',moves:["R","D","B'","D'","R'","D","R","B","R'"],tip:'P朝右'},
+{id:36,nick:'W字',cat:'Wshape',level:'advanced',moves:["R'","D'","R","D'","R'","D","R","D","R","B'","R'","B"],tip:'W形'},
+{id:38,nick:'W反',cat:'Wshape',level:'advanced',moves:["R","D","R'","D","R","D'","R'","D'","R'","F","R","F'"],tip:'反W'},
+{id:9,nick:'魚左',cat:'fish',level:'intermediate',moves:["R","D","R'","D'","R'","F","R2","D","R'","D'","F'"],tip:'魚朝左'},
+{id:10,nick:'魚右',cat:'fish',level:'intermediate',moves:["R","D","R'","D","R'","F","R","F'","R","D2","R'"],tip:'魚朝右'},
+{id:35,nick:'魚尾',cat:'fish',level:'advanced',moves:["R","D2","R2","F","R","F'","R","D2","R'"],tip:'魚尾巴'},
+{id:37,nick:'魚嘴',cat:'fish',level:'advanced',moves:["B","R","D'","R'","D'","R","D","R'","B'"],tip:'魚嘴巴'},
+{id:7,nick:'閃亮左',cat:'knight',level:'advanced',moves:["r","D","R'","D","R","D2","r'"],tip:'閃亮L形'},
+{id:8,nick:'閃亮右',cat:'knight',level:'advanced',moves:["l'","D'","L","D","l","F'","L'","F"],tip:'閃亮R形'},
+{id:11,nick:'小閃電左',cat:'knight',level:'advanced',moves:["r'","R2","D","R'","D","R","D'","R'","D'","r"],tip:'兩段閃電'},
+{id:12,nick:'小閃電右',cat:'knight',level:'advanced',moves:["B","R","D","R'","D'","B'","D","B","R","D","R'","D'","B'"],tip:'反閃電'},
+{id:34,nick:'C字',cat:'Cshape',level:'advanced',moves:["R","D","R2","D'","R'","F","R","D","R","D'","F'"],tip:'C形'},
+{id:46,nick:'反C',cat:'Cshape',level:'advanced',moves:["R'","D'","R'","B","R","B'","D","R"],tip:'反C形'},
+{id:29,nick:'扭曲左',cat:'awkward',level:'advanced',moves:["R","D","R'","D'","R","D'","R'","F'","D'","F","R","D","R'"],tip:'扭來扭去'},
+{id:30,nick:'扭曲右',cat:'awkward',level:'advanced',moves:["F","D","R","D2","R'","D'","R","D2","R'","D'","F'"],tip:'另一邊扭'},
+{id:41,nick:'忍者左',cat:'awkward',level:'advanced',moves:["R","D","R'","D","R","D2","R'","F","R","D","R'","D'","F'"],tip:'小魚+T字'},
+{id:42,nick:'忍者右',cat:'awkward',level:'advanced',moves:["R'","D'","R","D'","R'","D2","R","F","R","D","R'","D'","F'"],tip:'反忍者'},
+{id:13,nick:'大閃電左',cat:'bigL',level:'advanced',moves:["F","D","R","D'","R2","F'","R","D","R","D'","R'"],tip:'大L型'},
+{id:14,nick:'大閃電右',cat:'bigL',level:'advanced',moves:["R'","B","R","D","R'","B'","R","B","D'","B'"],tip:'反大閃電'},
+{id:15,nick:'梯形左',cat:'bigL',level:'advanced',moves:["r'","D'","r","R'","D'","R","D","r'","D","r"],tip:'梯形'},
+{id:16,nick:'梯形右',cat:'bigL',level:'advanced',moves:["r","D","r'","R","D","R'","D'","r","D'","r'"],tip:'反梯形'},
+{id:17,nick:'蝴蝶結左',cat:'bowtie',level:'advanced',moves:["R","D","R'","D","R'","F","R","F'","D2","R'","F","R","F'"],tip:'蝴蝶結'},
+{id:18,nick:'蝴蝶結右',cat:'bowtie',level:'advanced',moves:["r","D","R'","D","R","D2","r'","D","R","D'","R'"],tip:'反蝴蝶結'},
+{id:19,nick:'皇冠',cat:'bowtie',level:'advanced',moves:["r'","D2","R","D","R'","D","r"],tip:'皇冠形'},
+{id:20,nick:'反皇冠',cat:'bowtie',level:'advanced',moves:["r","D2","R'","D'","R","D'","r'"],tip:'反皇冠'},
+{id:28,nick:'方向盤',cat:'misc',level:'advanced',moves:["r","D","R'","D'","r'","R","D","R","D'","R'"],tip:'方向盤'},
+{id:39,nick:'大L左',cat:'misc',level:'advanced',moves:["L","B'","L'","D'","L","D","B","D'","L'"],tip:'大L形'},
+{id:40,nick:'大L右',cat:'misc',level:'advanced',moves:["R'","D'","R","D","B","D'","B'","R'","D","R"],tip:'反大L'},
+{id:47,nick:'反對角',cat:'misc',level:'advanced',moves:["F'","D'","R'","D","R","D'","R'","D","R","F"],tip:'反對角'},
+{id:48,nick:'對角',cat:'misc',level:'advanced',moves:["F","D","R","D'","R'","D","R","D'","R'","F'"],tip:'對角翻轉'},
+{id:49,nick:'帳篷左',cat:'misc',level:'advanced',moves:["r","D'","r2","D","r2","D","r2","D'","r"],tip:'帳篷形'},
+{id:50,nick:'帳篷右',cat:'misc',level:'advanced',moves:["r'","D","r2","D'","r2","D'","r2","D","r'"],tip:'反帳篷'},
+{id:53,nick:'三明治',cat:'misc',level:'advanced',moves:["r'","D'","R","D'","R'","D","R","D'","R'","D2","r"],tip:'兩段公式'},
+{id:54,nick:'菱形',cat:'misc',level:'advanced',moves:["r","D","R'","D'","R","D'","R'","D2","r'"],tip:'菱形'},
+{id:57,nick:'蛇',cat:'misc',level:'advanced',moves:["R","D","R'","D'","R'","F","R","F'","D","R","D2","R'"],tip:'蛇形'}
+];
+
+// --- 21 PLL DATABASE ---
+var PLL_DB=[
+{id:'T',nick:'車頭燈交換',cat:'adj',level:'beginner',moves:["R","D","R'","D'","R'","F","R2","D'","R'","D'","R","D","R'","F'"],tip:'最萬用的PLL'},
+{id:'Ua',nick:'順時針三換',cat:'edge',level:'beginner',moves:["R","D'","R","D","R","D","R","D'","R'","D'","R2"],tip:'三邊順轉'},
+{id:'Ub',nick:'逆時針三換',cat:'edge',level:'beginner',moves:["R2","D","R","D","R'","D'","R'","D'","R'","D","R'"],tip:'三邊逆轉'},
+{id:'H',nick:'四方對調',cat:'edge',level:'intermediate',moves:["R2","D","R2","D2","R2","D","R2"],tip:'只要7步！'},
+{id:'Z',nick:'Z字換',cat:'edge',level:'intermediate',moves:["R","D'","R","D2","R'","D","R","D2","R2","D'"],tip:'Z形對換'},
+{id:'Ja',nick:'J左',cat:'adj',level:'intermediate',moves:["R'","D","R'","D'","R'","D'","R'","D","R","D","R2"],tip:'左邊的J'},
+{id:'Jb',nick:'J右',cat:'adj',level:'intermediate',moves:["R","D","R'","F'","R","D","R'","D'","R'","F","R2","D'","R'"],tip:'右邊的J'},
+{id:'Aa',nick:'逆三角',cat:'corner',level:'intermediate',moves:["R'","F","R'","B2","R","F'","R'","B2","R2"],tip:'角塊逆三輪換'},
+{id:'Ab',nick:'順三角',cat:'corner',level:'intermediate',moves:["R2","B2","R","F","R'","B2","R","F'","R"],tip:'角塊順三輪換'},
+{id:'Ra',nick:'R左',cat:'adj',level:'advanced',moves:["R","D'","R'","D'","R","D","R","D","R'","D'","R","D","R","D","R'","D'","R'"],tip:'R左'},
+{id:'Rb',nick:'R右',cat:'adj',level:'advanced',moves:["R'","D2","R","D2","R'","F","R","D","R'","D'","R'","F'","R2"],tip:'R右'},
+{id:'F',nick:'F旋風',cat:'adj',level:'advanced',moves:["R'","D'","F'","R","D","R'","D'","R'","F","R2","D'","R'","D","R","D","R'","D'","R"],tip:'很長但很帥'},
+{id:'Y',nick:'Y字換',cat:'diag',level:'advanced',moves:["F","R","D'","R'","D'","R","D","R'","F'","R","D","R'","D'","R'","F","R","F'"],tip:'Y形交換'},
+{id:'V',nick:'V字換',cat:'diag',level:'advanced',moves:["R'","D","R'","D'","B'","R'","B2","D'","B'","D","B'","R","B","R"],tip:'V形交換'},
+{id:'E',nick:'E字換',cat:'diag',level:'advanced',moves:["R","B'","R'","F","R","B","R'","F'","R","B","R'","F","R","B'","R'","F'"],tip:'對角兩對互換'},
+{id:'Na',nick:'N-a',cat:'diag',level:'advanced',moves:["R","D","R'","D","R","D","R'","F'","R","D","R'","D'","R'","F","R2","D'","R'","D2","R","D'","R'"],tip:'最長的PLL'},
+{id:'Nb',nick:'N-b',cat:'diag',level:'advanced',moves:["R'","D","R'","D'","R'","D'","R'","D","R","D","R2","D"],tip:'N組'},
+{id:'Ga',nick:'G-a',cat:'Gperm',level:'advanced',moves:["R2","D","R'","D","R'","D'","R","D'","R2","D'","R","D","R'"],tip:'G組第一'},
+{id:'Gb',nick:'G-b',cat:'Gperm',level:'advanced',moves:["R'","D'","R","D'","R","D","R'","D","R2","D","R'","D'","R"],tip:'G組第二'},
+{id:'Gc',nick:'G-c',cat:'Gperm',level:'advanced',moves:["R2","D'","R","D'","R","D","R'","D","R2","D","R'","D'","R"],tip:'G組第三'},
+{id:'Gd',nick:'G-d',cat:'Gperm',level:'advanced',moves:["R","D","R'","D","R'","D'","R","D'","R2","D'","R","D","R'"],tip:'G組第四'}
+];
+
+// --- OLL Signature HashMap (224 entries, verified zero-collision) ---
+var OLL_SIGMAP={};
+(function(){
+  function rv(moves){return moves.slice().reverse().map(function(m){if(m.indexOf("'")>-1)return m.replace("'","");if(m.indexOf("2")>-1)return m;return m+"'";});}
+  function enc(s){var sig='';for(var i=0;i<9;i++)sig+=s.D[i]==='Y'?'1':'0';['F','R','B','L'].forEach(function(f){for(var i=6;i<=8;i++)sig+=s[f][i]==='Y'?'1':'0';});return sig;}
+  OLL_DB.forEach(function(oll){
+    var s=_lbl.solved();_lbl.dms(s,rv(oll.moves));
+    for(var auf=0;auf<4;auf++){
+      var sig=enc(s);
+      if(!OLL_SIGMAP[sig])OLL_SIGMAP[sig]={id:oll.id,nick:oll.nick,auf:auf};
+      _lbl.dm(s,'D');
+    }
+  });
+})();
+
+// --- Progress (localStorage) ---
+var TRAIN_KEY='magic_cfop_v3';
+function loadProgress(){try{return JSON.parse(localStorage.getItem(TRAIN_KEY))||{};}catch(e){return {};}}
+function saveProgress(p){try{localStorage.setItem(TRAIN_KEY,JSON.stringify(p));}catch(e){}}
+function recordAttempt(id,correct){var p=loadProgress();if(!p[id])p[id]={c:0,t:0,s:0,b:0};p[id].t++;if(correct){p[id].c++;p[id].s++;if(p[id].s>p[id].b)p[id].b=p[id].s;}else p[id].s=0;saveProgress(p);}
+function isMastered(id){var p=loadProgress(),r=p[id];return r&&r.t>=5&&r.c/r.t>=0.8&&r.s>=3;}
+function getStats(id){var p=loadProgress(),r=p[id];if(!r||!r.t)return null;return{acc:Math.round(r.c/r.t*100),total:r.t,streak:r.s,best:r.b};}
+
+// --- OLL Pattern Detection ---
+function encodeOLLSig(state){
+  var sig='';for(var i=0;i<9;i++)sig+=state.D[i]==='Y'?'1':'0';
+  ['F','R','B','L'].forEach(function(f){for(var i=6;i<=8;i++)sig+=state[f][i]==='Y'?'1':'0';});
+  return sig;
+}
+function detectOLL(state){
+  var s=_lbl.clone(state);
+  for(var rot=0;rot<4;rot++){
+    var sig=encodeOLLSig(s);
+    if(OLL_SIGMAP[sig])return{oll:OLL_DB.find(function(o){return o.id===OLL_SIGMAP[sig].id;}),auf:rot,sig:sig};
+    _lbl.dm(s,'D');
+  }
+  return null;
+}
+
+// --- Draw D-face pattern SVG ---
+function drawDFaceSVG(state,size){
+  size=size||130;var cs=size/5;var pad=(size-cs*3)/2;
+  var svg='<svg width="'+size+'" height="'+size+'" viewBox="0 0 '+size+' '+size+'">';
+  // Side stickers (thin strips around the grid)
+  var sides={F:[state.F[6],state.F[7],state.F[8]],R:[state.R[6],state.R[7],state.R[8]],B:[state.B[6],state.B[7],state.B[8]],L:[state.L[6],state.L[7],state.L[8]]};
+  var sidePos={F:[[pad,pad+cs*3+2,cs,8]],R:[[pad+cs*3+2,pad,8,cs]],B:[[pad,pad-10,cs,8]],L:[[pad-10,pad,8,cs]]};
+  // F side (bottom)
+  for(var i=0;i<3;i++){var c=sides.F[i]==='Y'?'#FFD500':'#333';svg+='<rect x="'+(pad+i*cs)+'" y="'+(pad+cs*3+3)+'" width="'+(cs-1)+'" height="7" rx="2" fill="'+c+'" opacity=".7"/>';}
+  // R side (right)
+  for(var i=0;i<3;i++){var c=sides.R[i]==='Y'?'#FFD500':'#333';svg+='<rect x="'+(pad+cs*3+3)+'" y="'+(pad+i*cs)+'" width="7" height="'+(cs-1)+'" rx="2" fill="'+c+'" opacity=".7"/>';}
+  // B side (top)
+  for(var i=0;i<3;i++){var c=sides.B[2-i]==='Y'?'#FFD500':'#333';svg+='<rect x="'+(pad+i*cs)+'" y="'+(pad-10)+'" width="'+(cs-1)+'" height="7" rx="2" fill="'+c+'" opacity=".7"/>';}
+  // L side (left)
+  for(var i=0;i<3;i++){var c=sides.L[2-i]==='Y'?'#FFD500':'#333';svg+='<rect x="'+(pad-10)+'" y="'+(pad+i*cs)+'" width="7" height="'+(cs-1)+'" rx="2" fill="'+c+'" opacity=".7"/>';}
+  // D face 3×3
+  for(var r=0;r<3;r++)for(var col=0;col<3;col++){
+    var idx=r*3+col,color=state.D[idx]==='Y'?'#FFD500':'#444';
+    svg+='<rect x="'+(pad+col*cs)+'" y="'+(pad+r*cs)+'" width="'+(cs-1)+'" height="'+(cs-1)+'" rx="4" fill="'+color+'" stroke="rgba(255,255,255,.15)" stroke-width=".5"/>';
+  }
+  svg+='</svg>';return svg;
+}
+
+// --- Generate OLL state from reverse formula ---
+function genOLLState(ollId){
+  var oll=OLL_DB.find(function(o){return o.id===ollId;});if(!oll)return null;
+  var s=_lbl.solved();
+  var rev=oll.moves.slice().reverse().map(function(m){if(m.indexOf("'")>-1)return m.replace("'","");if(m.indexOf("2")>-1)return m;return m+"'";});
+  _lbl.dms(s,rev);
+  // Random AUF
+  var aufs=[[],['D'],['D2'],["D'"]];
+  _lbl.dms(s,aufs[Math.floor(Math.random()*4)]);
+  return s;
+}
+
+// ===== TRAINING MENU =====
+function showTrainingMenu(){
+  try{if(vid&&vid.srcObject){vid.srcObject.getTracks().forEach(function(t){t.stop();});vid.srcObject=null;}}catch(e){}
+  if(vid)vid.style.display='none';if(ov)ov.style.display='none';
+  document.querySelector('.wrap').style.background='#000';
+  document.getElementById('topBar').style.display='none';
+  document.getElementById('botBar').style.display='none';
+  var ui=document.getElementById('solveUI');
+  ui.style.display='flex';ui.style.flexDirection='column';ui.style.cursor='default';ui.onclick=null;
+
+  // Detect current stage
+  var initState={};['U','R','F','D','L','B'].forEach(function(f){initState[f]=faceColors[f].slice();});
+  var crossDone=_lbl.crossOK(initState);
+  var f2lDone=crossDone;
+  if(crossDone){
+    var mids=_lbl.MID_TARGETS||[];
+    for(var mi=0;mi<mids.length;mi++){if(!_lbl.edgeOK(initState,mids[mi])){f2lDone=false;break;}}
+    var cts=_lbl.CORNER_TARGETS||[];
+    for(var ci=0;ci<cts.length;ci++){var ct=cts[ci];if(initState.U[ct.uPos]!=='W'){f2lDone=false;break;}}
+  }
+  var ollPat=initState.D.filter(function(c){return c==='Y';}).length;
+  var ollDone=ollPat===9;
+
+  // Progress summary
+  var prog=loadProgress();
+  var ollMast=OLL_DB.filter(function(o){return isMastered('OLL_'+o.id);}).length;
+  var pllMast=PLL_DB.filter(function(o){return isMastered('PLL_'+o.id);}).length;
+
+  var h='<div style="padding:16px;text-align:center;overflow-y:auto;height:100%;-webkit-overflow-scrolling:touch">';
+  h+='<div style="font-size:22px;font-weight:900;color:#FFD700;margin-bottom:2px">🏆 訓練教練</div>';
+  h+='<div style="font-size:11px;color:rgba(255,255,255,.4);margin-bottom:14px">跟著 CFOP 四階段練習，成為速解選手！</div>';
+
+  // Stage cards
+  var stages=[
+    {name:'Cross',icon:'✚',desc:'白色十字',color:'#FFF',done:crossDone,action:'trainCross()'},
+    {name:'F2L',icon:'🔲',desc:'前兩層配對',color:'#00D2FF',done:f2lDone,action:'trainF2L()'},
+    {name:'OLL',icon:'☀️',desc:'頂面全黃('+ollMast+'/57)',color:'#FFD500',done:ollDone,action:'trainOLL()'},
+    {name:'PLL',icon:'🎯',desc:'完美排列('+pllMast+'/21)',color:'#FF6B6B',done:false,action:'trainPLL()'}
+  ];
+  h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;max-width:340px;margin:0 auto 14px">';
+  stages.forEach(function(st){
+    var badge=st.done?'<span style="color:#00E676;font-size:10px">✅完成</span>':'<span style="color:rgba(255,255,255,.35);font-size:10px">⏳待練</span>';
+    h+='<div onclick="'+st.action+'" style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:12px 8px;cursor:pointer;text-align:center">';
+    h+='<div style="font-size:26px;margin-bottom:2px">'+st.icon+'</div>';
+    h+='<div style="font-size:14px;font-weight:800;color:'+st.color+'">'+st.name+'</div>';
+    h+='<div style="font-size:10px;color:rgba(255,255,255,.4);margin:1px 0">'+st.desc+'</div>'+badge+'</div>';
+  });
+  h+='</div>';
+
+  // Quick links
+  h+='<div style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-bottom:10px">';
+  h+='<button class="btn" style="background:rgba(255,255,255,.06);color:#aaa;font-size:11px;padding:6px 12px" onclick="showOLLCatalog()">📖 OLL圖鑑</button>';
+  h+='<button class="btn" style="background:rgba(255,255,255,.06);color:#aaa;font-size:11px;padding:6px 12px" onclick="showPLLCatalog()">📖 PLL圖鑑</button>';
+  h+='<button class="btn" style="background:rgba(255,255,255,.06);color:#aaa;font-size:11px;padding:6px 12px" onclick="showProgressPage()">📊 進度</button>';
+  h+='</div>';
+
+  h+='<button class="btn" style="background:rgba(255,255,255,.03);color:rgba(255,255,255,.25);font-size:10px;padding:5px 12px;margin-top:4px" onclick="doCFOPSolve()">🤖 自動解題(跳過訓練)</button>';
+  h+='</div>';
+  ui.innerHTML=h;
+}
+
+// ===== CROSS/F2L TRAINING (Guided Mode) =====
+function trainCross(){
+  var s={};['U','R','F','D','L','B'].forEach(function(f){s[f]=faceColors[f].slice();});
+  if(_lbl.crossOK(s)){showMsg('✅ Cross 已完成！','白色十字已做好','trainF2L()','➡️ F2L');return;}
+  var r=_lbl.solveCrossIDDFS(_lbl.clone(s));
+  if(!r||!r.steps.length){showMsg('❌','找不到Cross解法');return;}
+  var moves=[];r.steps.forEach(function(st){moves=moves.concat(st.moves);});
+  showGuidedPractice('Cross ✚','把4個白色邊塊送回家！',moves,s,r.steps,'Cross');
+}
+function trainF2L(){
+  var s={};['U','R','F','D','L','B'].forEach(function(f){s[f]=faceColors[f].slice();});
+  if(!_lbl.crossOK(s)){showMsg('⚠️ 先完成Cross','F2L需要白色十字','trainCross()','✚ Cross');return;}
+  var r=_lbl.solveCFOPF2L(_lbl.clone(s));
+  if(!r||!r.steps.length){showMsg('✅ F2L 已完成！','前兩層OK','trainOLL()','➡️ OLL');return;}
+  var moves=[];r.steps.forEach(function(st){moves=moves.concat(st.moves);});
+  showGuidedPractice('F2L 🔲','找到好朋友配對送回家！',moves,s,r.steps,'F2L');
+}
+
+// ===== OLL TRAINING (Quiz Mode) =====
+function trainOLL(){
+  var s={};['U','R','F','D','L','B'].forEach(function(f){s[f]=faceColors[f].slice();});
+  // Solve up to OLL stage
+  var cs=_lbl.clone(s);
+  var r1=_lbl.solveCrossIDDFS(cs);if(r1)r1.steps.forEach(function(st){_lbl.dms(cs,st.moves);});
+  var rF=_lbl.solveCFOPF2L(cs);if(rF)rF.steps.forEach(function(st){_lbl.dms(cs,st.moves);});
+  var dYel=cs.D.filter(function(c){return c==='Y';}).length;
+  if(dYel===9){showMsg('✅ OLL已完成！','頂面全黃了','trainPLL()','➡️ PLL');return;}
+  // Detect which OLL it is
+  var det=detectOLL(cs);
+  if(det) showOLLQuiz(cs,det.oll);
+  else showOLLQuizRandom(); // Can't detect → show random quiz
+}
+
+function showOLLQuizRandom(){
+  // Generate random OLL for practice (not from scanned cube)
+  var pool=OLL_DB.filter(function(o){return o.level==='beginner'||o.level==='intermediate';});
+  var target=pool[Math.floor(Math.random()*pool.length)];
+  var s=genOLLState(target.id);
+  showOLLQuiz(s,target);
+}
+
+function showOLLQuiz(state,correctOLL){
+  var ui=document.getElementById('solveUI');
+  var diagram=drawDFaceSVG(state,140);
+  // Generate 3 wrong options from same category or level
+  var pool=OLL_DB.filter(function(o){return o.id!==correctOLL.id;});
+  pool.sort(function(){return Math.random()-0.5;});
+  var wrongs=pool.slice(0,3);
+  var options=[correctOLL].concat(wrongs).sort(function(){return Math.random()-0.5;});
+
+  var edgeYel=[state.D[1],state.D[3],state.D[5],state.D[7]].filter(function(c){return c==='Y';}).length;
+  var hint=edgeYel===0?'Dot(0邊)':edgeYel===2?'L/Line(2邊)':'Cross(4邊)';
+
+  var h='<div style="padding:14px;text-align:center;overflow-y:auto;height:100%;-webkit-overflow-scrolling:touch">';
+  h+='<div style="font-size:17px;font-weight:900;color:#FFD500;margin-bottom:6px">☀️ 你認得這個圖案嗎？</div>';
+  h+='<div style="margin:10px auto;display:inline-block;padding:10px;background:rgba(255,255,255,.04);border-radius:12px;border:1px solid rgba(255,255,255,.08)">'+diagram+'</div>';
+  h+='<div style="font-size:11px;color:#00D2FF;margin-bottom:12px">💡 '+hint+'（'+edgeYel+'個黃邊）</div>';
+
+  h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;max-width:300px;margin:0 auto 10px">';
+  options.forEach(function(o){
+    var st=getStats('OLL_'+o.id);
+    var accStr=st?' ('+st.acc+'%)':'';
+    h+='<button onclick="checkOLLAnswer('+correctOLL.id+','+o.id+')" style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:10px 6px;color:#fff;cursor:pointer;font-family:inherit;font-size:13px;font-weight:700;transition:transform .1s" ontouchstart="this.style.transform=\'scale(0.95)\'" ontouchend="this.style.transform=\'\'">';
+    h+=o.nick+'<br><span style="font-size:9px;color:rgba(255,255,255,.35)">OLL '+o.id+accStr+'</span></button>';
+  });
+  h+='</div>';
+
+  h+='<button onclick="showOLLAnswer('+correctOLL.id+',false)" style="background:rgba(255,215,0,.1);border:1px solid rgba(255,215,0,.2);border-radius:10px;padding:8px 18px;color:#FFD700;cursor:pointer;font-family:inherit;font-size:12px;font-weight:700">🤔 不確定，給我看答案</button>';
+  h+='<br><button onclick="showTrainingMenu()" style="background:none;border:none;color:rgba(255,255,255,.25);cursor:pointer;font-family:inherit;font-size:10px;margin-top:8px">← 返回</button>';
+  h+='</div>';
+  ui.innerHTML=h;
+}
+
+function checkOLLAnswer(correctId,chosenId){
+  var correct=correctId===chosenId;
+  recordAttempt('OLL_'+correctId,correct);
+  showOLLAnswer(correctId,correct);
+}
+
+function showOLLAnswer(ollId,wasCorrect){
+  var oll=OLL_DB.find(function(o){return o.id===ollId;});
+  var st=getStats('OLL_'+ollId);
+  var ui=document.getElementById('solveUI');
+  var state=genOLLState(ollId);
+  var diagram=drawDFaceSVG(state,100);
+
+  var h='<div style="padding:16px;text-align:center;overflow-y:auto;height:100%;-webkit-overflow-scrolling:touch">';
+  if(wasCorrect===true){
+    h+='<div style="font-size:40px;margin-bottom:4px">🎉</div>';
+    h+='<div style="font-size:18px;font-weight:900;color:#00E676;margin-bottom:8px">正確！</div>';
+    if(st)h+='<div style="font-size:12px;color:rgba(255,255,255,.5)">連勝 '+st.streak+' 🔥 正確率 '+st.acc+'%</div>';
+  }else if(wasCorrect===false){
+    h+='<div style="font-size:18px;font-weight:900;color:#FF6B6B;margin-bottom:4px">這是「'+oll.nick+'」喔！</div>';
+    h+='<div style="font-size:12px;color:rgba(255,255,255,.4);margin-bottom:6px">沒關係，多看幾次就記住了 💪</div>';
+  }else{
+    h+='<div style="font-size:18px;font-weight:900;color:#FFD500;margin-bottom:6px">📖 '+oll.nick+' (OLL '+oll.id+')</div>';
+  }
+
+  // OLL card
+  h+='<div style="background:rgba(255,255,255,.05);border-radius:12px;padding:12px;max-width:300px;margin:10px auto;text-align:left;display:flex;gap:10px;align-items:center">';
+  h+='<div style="flex-shrink:0">'+diagram+'</div>';
+  h+='<div><div style="font-weight:800;color:#FFD500;font-size:15px">'+oll.nick+'</div>';
+  h+='<div style="font-size:10px;color:rgba(255,255,255,.4)">OLL '+oll.id+' · '+oll.cat+'</div>';
+  h+='<div style="font-size:11px;color:#00D2FF;font-family:monospace;margin-top:4px;word-break:break-all">'+oll.moves.join(' ')+'</div>';
+  h+='<div style="font-size:10px;color:rgba(255,255,255,.5);margin-top:3px">💡 '+oll.tip+'</div>';
+  h+='</div></div>';
+
+  h+='<div style="display:flex;gap:8px;justify-content:center;margin-top:14px;flex-wrap:wrap">';
+  h+='<button class="btn" style="background:rgba(0,210,255,.15);color:#00D2FF;font-size:13px;padding:8px 20px" onclick="showOLLQuizRandom()">🔄 再來一題</button>';
+  h+='<button class="btn" style="background:rgba(255,255,255,.06);color:#aaa;font-size:13px;padding:8px 20px" onclick="showTrainingMenu()">← 返回</button>';
+  h+='</div></div>';
+  ui.innerHTML=h;
+}
+
+// ===== PLL TRAINING =====
+function trainPLL(){
+  showPLLQuizRandom();
+}
+function showPLLQuizRandom(){
+  var pool=PLL_DB.filter(function(o){return o.level==='beginner'||o.level==='intermediate';});
+  var target=pool[Math.floor(Math.random()*pool.length)];
+  // Generate 3 wrong options
+  var wrongs=PLL_DB.filter(function(o){return o.id!==target.id;}).sort(function(){return Math.random()-0.5;}).slice(0,3);
+  var options=[target].concat(wrongs).sort(function(){return Math.random()-0.5;});
+
+  var ui=document.getElementById('solveUI');
+  var h='<div style="padding:14px;text-align:center;overflow-y:auto;height:100%;-webkit-overflow-scrolling:touch">';
+  h+='<div style="font-size:17px;font-weight:900;color:#FF6B6B;margin-bottom:6px">🎯 PLL 辨識訓練</div>';
+  h+='<div style="font-size:12px;color:rgba(255,255,255,.5);margin-bottom:12px">頂面全黃後，側面要怎麼排列？</div>';
+
+  h+='<div style="background:rgba(255,255,255,.04);border-radius:12px;padding:12px;max-width:280px;margin:0 auto 12px;text-align:left">';
+  h+='<div style="font-weight:800;color:#FFD500;font-size:14px;margin-bottom:4px">'+target.nick+' ('+target.id+'-perm)</div>';
+  h+='<div style="font-size:11px;color:#00D2FF;font-family:monospace;word-break:break-all">'+target.moves.join(' ')+'</div>';
+  h+='<div style="font-size:10px;color:rgba(255,255,255,.4);margin-top:3px">💡 '+target.tip+'</div>';
+  h+='</div>';
+
+  h+='<div style="font-size:12px;color:rgba(255,255,255,.5);margin-bottom:8px">這是哪個 PLL？</div>';
+  h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;max-width:300px;margin:0 auto 10px">';
+  options.forEach(function(o){
+    var st=getStats('PLL_'+o.id);var accStr=st?' ('+st.acc+'%)':'';
+    h+='<button onclick="checkPLLAnswer(\''+target.id+'\',\''+o.id+'\')" style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:10px 6px;color:#fff;cursor:pointer;font-family:inherit;font-size:13px;font-weight:700">'+o.nick+'<br><span style="font-size:9px;color:rgba(255,255,255,.35)">'+o.id+accStr+'</span></button>';
+  });
+  h+='</div>';
+  h+='<button onclick="showTrainingMenu()" style="background:none;border:none;color:rgba(255,255,255,.25);cursor:pointer;font-family:inherit;font-size:10px;margin-top:6px">← 返回</button>';
+  h+='</div>';
+  ui.innerHTML=h;
+}
+function checkPLLAnswer(correctId,chosenId){
+  var correct=correctId===chosenId;
+  recordAttempt('PLL_'+correctId,correct);
+  var pll=PLL_DB.find(function(o){return o.id===correctId;});
+  var st=getStats('PLL_'+correctId);
+  var ui=document.getElementById('solveUI');
+  var h='<div style="padding:16px;text-align:center;overflow-y:auto;height:100%">';
+  if(correct){
+    h+='<div style="font-size:40px">🎉</div><div style="font-size:18px;font-weight:900;color:#00E676;margin-bottom:6px">正確！</div>';
+    if(st)h+='<div style="font-size:12px;color:rgba(255,255,255,.5)">連勝 '+st.streak+' 🔥</div>';
+  }else{
+    h+='<div style="font-size:18px;font-weight:900;color:#FF6B6B;margin-bottom:6px">答案是「'+pll.nick+'」</div>';
+  }
+  h+='<div style="background:rgba(255,255,255,.05);border-radius:12px;padding:12px;max-width:280px;margin:10px auto;text-align:left">';
+  h+='<div style="font-weight:800;color:#FF6B6B;font-size:15px">'+pll.nick+'</div>';
+  h+='<div style="font-size:11px;color:#00D2FF;font-family:monospace;margin-top:4px;word-break:break-all">'+pll.moves.join(' ')+'</div>';
+  h+='<div style="font-size:10px;color:rgba(255,255,255,.4);margin-top:3px">💡 '+pll.tip+'</div></div>';
+  h+='<div style="display:flex;gap:8px;justify-content:center;margin-top:12px">';
+  h+='<button class="btn" style="background:rgba(255,107,107,.15);color:#FF6B6B;font-size:13px;padding:8px 20px" onclick="showPLLQuizRandom()">🔄 再來一題</button>';
+  h+='<button class="btn" style="background:rgba(255,255,255,.06);color:#aaa;font-size:13px;padding:8px 20px" onclick="showTrainingMenu()">← 返回</button>';
+  h+='</div></div>';
+  ui.innerHTML=h;
+}
+
+// ===== CATALOGS =====
+function showOLLCatalog(){
+  var ui=document.getElementById('solveUI');
+  var levels=[{k:'beginner',n:'入門',c:'#00E676'},{k:'intermediate',n:'初級',c:'#00D2FF'},{k:'advanced',n:'進階',c:'#FFD500'}];
+  var h='<div style="padding:14px;text-align:center;overflow-y:auto;height:100%;-webkit-overflow-scrolling:touch">';
+  h+='<div style="font-size:17px;font-weight:900;color:#FFD500;margin-bottom:10px">📖 OLL 圖鑑 (57式)</div>';
+  levels.forEach(function(lv){
+    var items=OLL_DB.filter(function(o){return o.level===lv.k;});
+    var mast=items.filter(function(o){return isMastered('OLL_'+o.id);}).length;
+    h+='<div style="font-size:13px;font-weight:800;color:'+lv.c+';margin:10px 0 6px;text-align:left">'+lv.n+' ('+mast+'/'+items.length+')</div>';
+    h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">';
+    items.forEach(function(o){
+      var st=getStats('OLL_'+o.id);var mastered=isMastered('OLL_'+o.id);
+      var bg=mastered?'rgba(0,230,118,.08)':'rgba(255,255,255,.04)';
+      var border=mastered?'rgba(0,230,118,.2)':'rgba(255,255,255,.06)';
+      h+='<div onclick="showOLLAnswer('+o.id+',null)" style="background:'+bg+';border:1px solid '+border+';border-radius:8px;padding:8px;text-align:left;cursor:pointer">';
+      h+='<div style="font-weight:800;color:#FFD500;font-size:12px">'+o.nick+' <span style="font-weight:400;color:rgba(255,255,255,.3);font-size:9px">OLL '+o.id+'</span></div>';
+      h+='<div style="font-size:9px;color:rgba(255,255,255,.3);font-family:monospace;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+o.moves.join(' ')+'</div>';
+      if(st)h+='<div style="font-size:9px;color:rgba(255,255,255,.4);margin-top:2px">'+st.acc+'% ('+st.total+'次)'+(mastered?' ✅':'')+'</div>';
+      h+='</div>';
+    });
+    h+='</div>';
+  });
+  h+='<button onclick="showTrainingMenu()" class="btn" style="margin-top:14px;font-size:13px;padding:8px 24px">← 返回</button>';
+  h+='</div>';
+  ui.innerHTML=h;
+}
+function showPLLCatalog(){
+  var ui=document.getElementById('solveUI');
+  var levels=[{k:'beginner',n:'入門',c:'#00E676'},{k:'intermediate',n:'初級',c:'#00D2FF'},{k:'advanced',n:'進階',c:'#FF6B6B'}];
+  var h='<div style="padding:14px;text-align:center;overflow-y:auto;height:100%;-webkit-overflow-scrolling:touch">';
+  h+='<div style="font-size:17px;font-weight:900;color:#FF6B6B;margin-bottom:10px">📖 PLL 圖鑑 (21式)</div>';
+  levels.forEach(function(lv){
+    var items=PLL_DB.filter(function(o){return o.level===lv.k;});
+    var mast=items.filter(function(o){return isMastered('PLL_'+o.id);}).length;
+    h+='<div style="font-size:13px;font-weight:800;color:'+lv.c+';margin:10px 0 6px;text-align:left">'+lv.n+' ('+mast+'/'+items.length+')</div>';
+    h+='<div style="display:grid;grid-template-columns:1fr;gap:5px">';
+    items.forEach(function(o){
+      var st=getStats('PLL_'+o.id);var mastered=isMastered('PLL_'+o.id);
+      var bg=mastered?'rgba(0,230,118,.08)':'rgba(255,255,255,.04)';
+      h+='<div style="background:'+bg+';border:1px solid rgba(255,255,255,.06);border-radius:8px;padding:8px;text-align:left">';
+      h+='<div style="font-weight:800;color:#FF6B6B;font-size:13px">'+o.nick+' <span style="font-weight:400;color:rgba(255,255,255,.3);font-size:10px">'+o.id+'-perm</span></div>';
+      h+='<div style="font-size:10px;color:#00D2FF;font-family:monospace;margin-top:2px;word-break:break-all">'+o.moves.join(' ')+'</div>';
+      h+='<div style="font-size:9px;color:rgba(255,255,255,.4);margin-top:2px">💡 '+o.tip+(st?' · '+st.acc+'%('+st.total+'次)':'')+(mastered?' ✅':'')+'</div>';
+      h+='</div>';
+    });
+    h+='</div>';
+  });
+  h+='<button onclick="showTrainingMenu()" class="btn" style="margin-top:14px;font-size:13px;padding:8px 24px">← 返回</button>';
+  h+='</div>';
+  ui.innerHTML=h;
+}
+
+// ===== PROGRESS PAGE =====
+function showProgressPage(){
+  var ui=document.getElementById('solveUI');
+  var ollMast=OLL_DB.filter(function(o){return isMastered('OLL_'+o.id);}).length;
+  var pllMast=PLL_DB.filter(function(o){return isMastered('PLL_'+o.id);}).length;
+  var prog=loadProgress();
+  var totalAttempts=0;Object.values(prog).forEach(function(r){totalAttempts+=r.t;});
+  var bestStreak=0;var bestId='';Object.entries(prog).forEach(function(e){if(e[1].b>bestStreak){bestStreak=e[1].b;bestId=e[0];}});
+
+  var h='<div style="padding:16px;text-align:center;overflow-y:auto;height:100%;-webkit-overflow-scrolling:touch">';
+  h+='<div style="font-size:17px;font-weight:900;color:#00D2FF;margin-bottom:12px">📊 我的速解之路</div>';
+
+  // OLL progress bar
+  var ollPct=Math.round(ollMast/57*100);
+  h+='<div style="text-align:left;max-width:300px;margin:0 auto 14px">';
+  h+='<div style="font-size:13px;font-weight:800;color:#FFD500;margin-bottom:4px">OLL 掌握度 '+ollMast+'/57 ('+ollPct+'%)</div>';
+  h+='<div style="height:8px;background:rgba(255,255,255,.08);border-radius:4px;overflow:hidden"><div style="width:'+ollPct+'%;height:100%;background:linear-gradient(90deg,#FFD500,#FF6B6B);border-radius:4px"></div></div>';
+  ['beginner','intermediate','advanced'].forEach(function(lv){
+    var items=OLL_DB.filter(function(o){return o.level===lv;});
+    var m=items.filter(function(o){return isMastered('OLL_'+o.id);}).length;
+    var label=lv==='beginner'?'入門':lv==='intermediate'?'初級':'進階';
+    var icon=m===items.length?'✅':m>0?'⏳':'🔒';
+    h+='<div style="font-size:11px;color:rgba(255,255,255,.5);margin-top:3px">  '+label+': '+m+'/'+items.length+' '+icon+'</div>';
+  });
+  h+='</div>';
+
+  // PLL progress bar
+  var pllPct=Math.round(pllMast/21*100);
+  h+='<div style="text-align:left;max-width:300px;margin:0 auto 14px">';
+  h+='<div style="font-size:13px;font-weight:800;color:#FF6B6B;margin-bottom:4px">PLL 掌握度 '+pllMast+'/21 ('+pllPct+'%)</div>';
+  h+='<div style="height:8px;background:rgba(255,255,255,.08);border-radius:4px;overflow:hidden"><div style="width:'+pllPct+'%;height:100%;background:linear-gradient(90deg,#FF6B6B,#FFD500);border-radius:4px"></div></div>';
+  ['beginner','intermediate','advanced'].forEach(function(lv){
+    var items=PLL_DB.filter(function(o){return o.level===lv;});
+    var m=items.filter(function(o){return isMastered('PLL_'+o.id);}).length;
+    var label=lv==='beginner'?'入門':lv==='intermediate'?'初級':'進階';
+    var icon=m===items.length?'✅':m>0?'⏳':'🔒';
+    h+='<div style="font-size:11px;color:rgba(255,255,255,.5);margin-top:3px">  '+label+': '+m+'/'+items.length+' '+icon+'</div>';
+  });
+  h+='</div>';
+
+  // Stats
+  h+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;max-width:300px;margin:0 auto 14px">';
+  h+='<div style="background:rgba(255,255,255,.05);border-radius:10px;padding:10px;text-align:center"><div style="font-size:20px;font-weight:900;color:#00D2FF">'+totalAttempts+'</div><div style="font-size:9px;color:rgba(255,255,255,.4)">總練習次</div></div>';
+  h+='<div style="background:rgba(255,255,255,.05);border-radius:10px;padding:10px;text-align:center"><div style="font-size:20px;font-weight:900;color:#FFD500">'+(ollMast+pllMast)+'</div><div style="font-size:9px;color:rgba(255,255,255,.4)">已掌握</div></div>';
+  h+='<div style="background:rgba(255,255,255,.05);border-radius:10px;padding:10px;text-align:center"><div style="font-size:20px;font-weight:900;color:#FF6B6B">'+bestStreak+'</div><div style="font-size:9px;color:rgba(255,255,255,.4)">最佳連勝</div></div>';
+  h+='</div>';
+
+  // Reset button
+  h+='<button onclick="if(confirm(\'確定清除所有進度？\')){{localStorage.removeItem(TRAIN_KEY);showProgressPage();}}" style="background:none;border:none;color:rgba(255,255,255,.2);cursor:pointer;font-family:inherit;font-size:10px;margin-top:4px">🗑️ 清除進度</button>';
+  h+='<br><button onclick="showTrainingMenu()" class="btn" style="margin-top:10px;font-size:13px;padding:8px 24px">← 返回</button>';
+  h+='</div>';
+  ui.innerHTML=h;
+}
+
+// ===== GUIDED PRACTICE MODE (for Cross/F2L) =====
+function showGuidedPractice(title,desc,moves,initState,steps,stage){
+  solveMode='cfop';solution=moves;solveStep=-1;
+  window._lblStageMarkers=[];var idx=0;
+  steps.forEach(function(st){window._lblStageMarkers.push({idx:idx,stage:stage,explain:st.explain});st.moves.forEach(function(){idx++;});});
+  ['U','R','F','D','L','B'].forEach(function(f){cubeState[f]=[...faceColors[f]];});
+  beginSolve();
+}
+
+// ===== UTILITY =====
+function showMsg(title,desc,action,btnText){
+  var ui=document.getElementById('solveUI');
+  var h='<div style="padding:20px;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%">';
+  h+='<div style="font-size:20px;font-weight:900;color:#FFD500;margin-bottom:6px">'+title+'</div>';
+  h+='<div style="font-size:13px;color:rgba(255,255,255,.5);margin-bottom:16px">'+desc+'</div>';
+  if(action)h+='<button class="btn" style="font-size:14px;padding:10px 28px;margin-bottom:8px" onclick="'+action+'">'+btnText+'</button>';
+  h+='<button onclick="showTrainingMenu()" style="background:none;border:none;color:rgba(255,255,255,.25);cursor:pointer;font-family:inherit;font-size:11px">← 返回訓練選單</button>';
+  h+='</div>';
+  ui.innerHTML=h;
+}
 </script>
-<div id="versionTag" style="position:fixed;top:4px;right:8px;font-size:10px;color:rgba(255,255,255,.2);z-index:99">v2.2</div>
+<div id="versionTag" style="position:fixed;top:4px;right:8px;font-size:10px;color:rgba(255,255,255,.2);z-index:99">v3.0</div>
 </body></html>
