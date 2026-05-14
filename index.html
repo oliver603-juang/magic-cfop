@@ -2473,7 +2473,7 @@ function doClassifyInner(){
       var cp=rawData[f][4],rf=cp[0]/255,gf=cp[1]/255,bf=cp[2]/255;
       var mx=Math.max(rf,gf,bf),mn=Math.min(rf,gf,bf);
       var csat=mx>0?(mx-mn)/mx:0;
-      if(csat>0.15){
+      if(csat>0.08){
         var nts=[];
         for(var j=0;j<9;j++){if(j===4)continue;var p=rawData[f][j];
           var pr=p[0]/255,pg=p[1]/255,pb=p[2]/255;
