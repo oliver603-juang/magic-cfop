@@ -330,15 +330,14 @@ function finishCornerScan(){
 }
 
 function doClassifyCorner(){
-  // The corner-shot samples are already in standard face orientation
-  // (U[0]=UBL corner, F[0]=UFL corner etc. — determined by the isometric guide)
-  // We can go straight to classification without any rot90 correction.
-  // Copy rawData to rd (no rotation needed)
+  // Corner-shot samples need face remapping (staircase→box folding)
+  // then standard smartDist + auction classification
   try{ doClassifyInnerCorner(); }catch(e){ showError('分析錯誤: '+e.message); }
 }
 
 function doClassifyInnerCorner(){
-  // No rotation needed! The isometric guide already maps to standard positions.
+  // NO ROTATION — store exactly as sampled from camera.
+  // User verifies on the staircase diagram and drags to correct.
   const rd={};
   ['U','R','F','D','L','B'].forEach(f=>{
     if(rawData[f])rd[f]=rawData[f].map(x=>x.slice?x.slice():[...x]);
@@ -383,13 +382,136 @@ function doClassifyInnerCorner(){
   nonC.forEach(s=>{const sorted=Object.entries(s.dists).sort((a,b)=>a[1]-b[1]);s.sortedDists=sorted;s.bestDist=sorted[0][1];s.secondColor=sorted[1][0];s.secondDist=sorted[1][1];s.ambiguity=s.secondDist>0?(s.secondDist-s.bestDist)/s.secondDist:1;});
   FO.forEach(f=>{faceColors[f]=all.filter(s=>s.face===f).sort((a,b)=>a.pos-b.pos).map(s=>s.color);});
 
-  // Show results and verify
-  showFacePreviews('mgrid');
-  const cnt={};FO.forEach(f=>faceColors[f].forEach(c=>{cnt[c]=(cnt[c]||0)+1;}));
-  const ok=Object.values(cnt).every(v=>v===9)&&Object.keys(cnt).length===6;
-  if(!ok){showError('每個顏色必須剛好 9 個！目前: '+Object.entries(cnt).map(([c,n])=>CN[c]+':'+n).join(' '));return;}
-  doLBLSolve();
+  // Show results on staircase diagram with drag-to-swap
+  showStaircaseDiagram();
 }
+
+function showStaircaseDiagram(){
+  // Build staircase layout: F-R / D-B / L-U (as seen in camera order)
+  const STAIR=[
+    {f:'F',label:'紅(F)',row:0,col:0},{f:'R',label:'藍(R)',row:0,col:1},
+    {f:'D',label:'黃(D)',row:1,col:1},{f:'B',label:'橘(B)',row:1,col:2},
+    {f:'L',label:'綠(L)',row:2,col:2},{f:'U',label:'白(U)',row:2,col:3}
+  ];
+  const cellSz=window.innerWidth<500?28:36;
+  const gap=2;
+  const faceSz=cellSz*3+gap*2;
+  const faceGap=4;
+  const totalW=(faceSz+faceGap)*4;
+  const totalH=(faceSz+faceGap)*3+60;
+  const mg=document.getElementById('mgrid');
+  mg.style.display='block';
+  mg.style.overflow='auto';
+  let html='<div style="position:relative;width:'+totalW+'px;height:'+totalH+'px;margin:0 auto" id="staircaseWrap">';
+  // Title
+  html+='<div style="position:absolute;top:0;left:0;width:100%;text-align:center;font-size:13px;color:#FFD700">階梯圖（拖曳色塊交換位置）</div>';
+  // Draw adjacency connectors (arrows between stair steps)
+  const connectors=[
+    {label:'左轉',x1:0,y1:0,x2:1,y2:0},
+    {label:'上翻',x1:1,y1:0,x2:1,y2:1},
+    {label:'左轉',x1:1,y1:1,x2:2,y2:1},
+    {label:'上翻',x1:2,y1:1,x2:2,y2:2},
+    {label:'左轉',x1:2,y1:2,x2:3,y2:2}
+  ];
+  STAIR.forEach(({f,label,row,col})=>{
+    const ox=col*(faceSz+faceGap);
+    const oy=row*(faceSz+faceGap)+24;
+    // Face label
+    html+='<div style="position:absolute;left:'+ox+'px;top:'+(oy-14)+'px;width:'+faceSz+'px;text-align:center;font-size:10px;color:rgba(255,255,255,.5)">'+label+'</div>';
+    // 3x3 grid
+    for(let r=0;r<3;r++)for(let c=0;c<3;c++){
+      const idx=r*3+c;
+      const color=faceColors[f][idx];
+      const x=ox+c*(cellSz+gap);
+      const y=oy+r*(cellSz+gap);
+      const isCenter=idx===4;
+      html+='<div class="stcell" data-face="'+f+'" data-pos="'+idx+'" draggable="'+(isCenter?'false':'true')+'" style="position:absolute;left:'+x+'px;top:'+y+'px;width:'+cellSz+'px;height:'+cellSz+'px;background:'+CMAP[color]+';border:1px solid rgba(0,0,0,.3);border-radius:3px;cursor:'+(isCenter?'default':'grab')+';display:flex;align-items:center;justify-content:center;font-size:9px;color:'+(color==='W'||color==='Y'?'#333':'#fff')+';user-select:none;'+(isCenter?'box-shadow:inset 0 0 0 2px #FFD700;':'')+'">'+CN[color]+'</div>';
+    }
+  });
+  html+='</div>';
+  mg.innerHTML=html;
+  // Add drag-and-drop handlers
+  initStaircaseDrag();
+  // Show instruction + solve button
+  document.getElementById('title').textContent='🎯 階梯確認';
+  document.getElementById('sub').textContent='拖曳色塊交換位置，中心格固定';
+  document.getElementById('info').innerHTML='<span style="color:#FFD700">請對照魔方確認每個色塊正確</span>';
+  document.getElementById('btnRow').innerHTML='<button class="btn" onclick="doManualSolve()">✅ 確認後解題</button>';
+}
+
+function initStaircaseDrag(){
+  let dragSrc=null;
+  const wrap=document.getElementById('staircaseWrap');
+  if(!wrap)return;
+  wrap.addEventListener('dragstart',function(e){
+    const el=e.target.closest('.stcell');
+    if(!el||el.dataset.pos==='4')return;
+    dragSrc=el;
+    el.style.opacity='0.4';
+    e.dataTransfer.effectAllowed='move';
+    e.dataTransfer.setData('text/plain','');
+  });
+  wrap.addEventListener('dragover',function(e){e.preventDefault();e.dataTransfer.dropEffect='move';});
+  wrap.addEventListener('drop',function(e){
+    e.preventDefault();
+    const el=e.target.closest('.stcell');
+    if(!el||!dragSrc||el===dragSrc)return;
+    if(el.dataset.pos==='4'||dragSrc.dataset.pos==='4')return;
+    // Swap colors
+    const f1=dragSrc.dataset.face,p1=+dragSrc.dataset.pos;
+    const f2=el.dataset.face,p2=+el.dataset.pos;
+    const tmp=faceColors[f1][p1];
+    faceColors[f1][p1]=faceColors[f2][p2];
+    faceColors[f2][p2]=tmp;
+    showStaircaseDiagram();
+  });
+  wrap.addEventListener('dragend',function(e){
+    if(dragSrc)dragSrc.style.opacity='1';
+    dragSrc=null;
+  });
+  // Touch support for mobile
+  let touchSrc=null,touchClone=null;
+  wrap.addEventListener('touchstart',function(e){
+    const el=e.target.closest('.stcell');
+    if(!el||el.dataset.pos==='4')return;
+    touchSrc=el;
+    // Create floating clone
+    touchClone=el.cloneNode(true);
+    touchClone.style.position='fixed';
+    touchClone.style.zIndex='9999';
+    touchClone.style.opacity='0.8';
+    touchClone.style.pointerEvents='none';
+    touchClone.style.transform='scale(1.2)';
+    document.body.appendChild(touchClone);
+    const t=e.touches[0];
+    touchClone.style.left=(t.clientX-18)+'px';
+    touchClone.style.top=(t.clientY-18)+'px';
+    el.style.opacity='0.3';
+  },{passive:true});
+  wrap.addEventListener('touchmove',function(e){
+    if(!touchClone)return;
+    e.preventDefault();
+    const t=e.touches[0];
+    touchClone.style.left=(t.clientX-18)+'px';
+    touchClone.style.top=(t.clientY-18)+'px';
+  },{passive:false});
+  wrap.addEventListener('touchend',function(e){
+    if(!touchSrc){return;}
+    if(touchClone){touchClone.remove();touchClone=null;}
+    touchSrc.style.opacity='1';
+    const t=e.changedTouches[0];
+    const dropEl=document.elementFromPoint(t.clientX,t.clientY);
+    const target=dropEl?dropEl.closest('.stcell'):null;
+    if(target&&target!==touchSrc&&target.dataset.pos!=='4'){
+      const f1=touchSrc.dataset.face,p1=+touchSrc.dataset.pos;
+      const f2=target.dataset.face,p2=+target.dataset.pos;
+      const tmp=faceColors[f1][p1];
+      faceColors[f1][p1]=faceColors[f2][p2];
+      faceColors[f2][p2]=tmp;
+      showStaircaseDiagram();
+    }
+    touchSrc=null;
+  });
 
 // ===== GALLERY UPLOAD =====
 function startGallery(){
@@ -2603,5 +2725,5 @@ function prevMove(){if(solveStep<=0)return;undoMoveOnState(solution[solveStep-1]
 (async function(){try{await navigator.wakeLock.request('screen');}catch(e){}})();
 if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(function(){});}
 </script>
-<div id="versionTag">v24-corner1</div>
+<div id="versionTag">v24-corner3</div>
 </body></html>
