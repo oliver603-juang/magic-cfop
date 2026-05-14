@@ -2150,6 +2150,8 @@ async function startApp(){
   try{
     const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280},height:{ideal:720}}});
     vid.srcObject=s;await vid.play();
+    // 強制開啟手電筒輔助光源（改善色塊辨識精度）
+    try{var track=s.getVideoTracks()[0];if(track){var caps=track.getCapabilities();if(caps&&caps.torch){await track.applyConstraints({advanced:[{torch:true}]});}}}catch(te){}
     ov.width=vid.videoWidth||720;ov.height=vid.videoHeight||1280;
     mode='scan';scanIdx=0;
     document.getElementById('topBar').style.display='block';
@@ -2178,7 +2180,7 @@ function startManual(){
 // ===== SOLVER WORKER (Kociemba) =====
 function initSolver(){
   const lib=document.getElementById('cubejs-src').textContent;
-  const code=lib+`\nconst C=self.Cube||(typeof Cube!=='undefined'?Cube:null);let rdy=false;self.onmessage=function(e){if(e.data.t==='init'){try{C.initSolver();rdy=true;postMessage({t:'ok'})}catch(er){postMessage({t:'err',m:er.message})}}if(e.data.t==='solve'){if(!rdy){C.initSolver();rdy=true}try{const c=C.fromString(e.data.fl);postMessage({t:'sol',s:c.solve()})}catch(er){postMessage({t:'err',m:er.message})}}};`;
+  const code=lib+`\nconst C=self.Cube||(typeof Cube!=='undefined'?Cube:null);let rdy=false;self.onmessage=function(e){if(e.data.t==='init'){try{C.initSolver();rdy=true;postMessage({t:'ok'})}catch(er){postMessage({t:'err',m:er.message})}}if(e.data.t==='solve'){if(!rdy){C.initSolver();rdy=true}try{const c=C.fromString(e.data.fl);postMessage({t:'sol',s:c.solve()})}catch(er){postMessage({t:'err',m:er.message})}}if(e.data.t==='validate'){if(!rdy){C.initSolver();rdy=true}try{const c=C.fromString(e.data.fl);const j=c.toJSON();const eoP=j.eo.reduce((a,b)=>a+b,0)%2;const coP=j.co.reduce((a,b)=>a+b,0)%3;function pp(arr){let v=new Array(arr.length).fill(false),p=0;for(let i=0;i<arr.length;i++){if(!v[i]){let j2=i,len=0;while(!v[j2]){v[j2]=true;j2=arr[j2];len++;}if(len>1)p+=(len-1);}}return p%2;}const epP=pp(j.ep);const cpP=pp(j.cp);const ok=eoP===0&&coP===0&&epP===cpP;postMessage({t:'valid',ok:ok,eoP:eoP,coP:coP,epP:epP,cpP:cpP})}catch(er){postMessage({t:'valid',ok:false,err:er.message})}}};`;
   solverWorker=new Worker(URL.createObjectURL(new Blob([code],{type:'application/javascript'})));
   solverReady=false;
   solverWorker.onmessage=e=>{
@@ -4410,30 +4412,177 @@ function showTrainingMenu(){
 }
 
 // ===== CFOP GUIDED SOLVE (引導小學生完整解一次) =====
+// === Parity validation (run inside main thread using facelet string) ===
+function buildFaceletString(fc){
+  var fl='';['U','R','F','D','L','B'].forEach(function(f){fc[f].forEach(function(c){fl+=C2F[c]||'?';});});return fl;
+}
+function validateAndFix(fl,cb){
+  // Send to worker for parity check
+  var origCB=solverCB;
+  solverCB=function(err,sol){
+    // This won't be called for validate - we listen via onmessage override
+  };
+  var handler=function(e){
+    if(e.data.t!=='valid')return;
+    solverWorker.removeEventListener('message',handler);
+    if(e.data.ok){cb(null,fl);return;}
+    // Parity failed → try brute-force swap fix
+    var arr=fl.split('');
+    for(var i=0;i<54;i++){
+      if(i%9===4)continue;
+      for(var j=i+1;j<54;j++){
+        if(j%9===4)continue;
+        if(arr[i]===arr[j])continue;
+        var tmp=arr[i];arr[i]=arr[j];arr[j]=tmp;
+        var testFL=arr.join('');
+        // Quick check: each color still 9?
+        var cnt={};for(var k=0;k<54;k++){cnt[testFL[k]]=(cnt[testFL[k]]||0)+1;}
+        var colorOK=true;for(var c in cnt){if(cnt[c]!==9)colorOK=false;}
+        if(colorOK){
+          // Send to worker for validation
+          var found=false;
+          var handler2=function(e2){
+            if(e2.data.t!=='valid')return;
+            solverWorker.removeEventListener('message',handler2);
+            if(e2.data.ok&&!found){found=true;cb(null,testFL,i,j);return;}
+            if(!found){arr[j]=arr[i];arr[i]=tmp;continueSearch();}
+          };
+          solverWorker.addEventListener('message',handler2);
+          solverWorker.postMessage({t:'validate',fl:testFL});
+          return;
+        }
+        arr[j]=arr[i];arr[i]=tmp;
+      }
+    }
+    cb('unfixable');
+  };
+  solverWorker.addEventListener('message',handler);
+  solverWorker.postMessage({t:'validate',fl:fl});
+}
+// Synchronous brute-force (simpler - run validation in main thread using cubejs in worker)
+function attemptAutoFixSync(fl){
+  // We can't run cubejs in main thread. Use a simpler heuristic:
+  // Try all 1431 swaps, for each one send to worker and check.
+  // But this would be async. Instead, let's do it all in the worker.
+  return null;
+}
+
 function startCFOPGuided(){
   var ui=setupTrainUI();
-  ui.innerHTML='<div style="padding:20px;text-align:center;color:#FFD700;font-size:16px;font-weight:900">🧩 CFOP 計算中...</div>';
-  setTimeout(function(){
-    try{
-      var initState={};['U','R','F','D','L','B'].forEach(function(f){initState[f]=faceColors[f].slice();});
-      var result=_lbl.cfopEngine(_lbl.clone(initState));
-      var sv=_lbl.solved(),ok=true;
-      ['U','R','F','D','L','B'].forEach(function(f){for(var i=0;i<9;i++){if(result.state[f][i]!==sv[f][i])ok=false;}});
-      if(!ok){showMsg('❌ CFOP 無法還原','請確認色塊是否正確','showTrainingMenu()','← 返回');return;}
-      // Build stage breakdown
-      var stages=[],curStage=null;
-      result.script.forEach(function(seg){
-        if(!curStage||curStage.name!==seg.stage){
-          curStage={name:seg.stage,steps:[],totalMoves:0};stages.push(curStage);
-        }
-        curStage.steps.push(seg);
-        curStage.totalMoves+=seg.moves.length;
-      });
-      showCFOPStageSelect(initState,result,stages);
-    }catch(e){
-      showMsg('❌ 錯誤',e.message,'showTrainingMenu()','← 返回');
+  ui.innerHTML='<div style="padding:20px;text-align:center;color:#FFD700;font-size:16px;font-weight:900">🧩 驗證色塊中...</div>';
+  
+  var initState={};['U','R','F','D','L','B'].forEach(function(f){initState[f]=faceColors[f].slice();});
+  var fl=buildFaceletString(initState);
+  
+  // Step 1: Validate parity in worker
+  if(!solverWorker||!solverReady){if(!solverWorker)initSolver();setTimeout(function(){startCFOPGuided();},500);return;}
+  
+  var validateHandler=function(e){
+    if(e.data.t!=='valid')return;
+    solverWorker.removeEventListener('message',validateHandler);
+    
+    if(e.data.ok){
+      // Valid! Run CFOP
+      ui.innerHTML='<div style="padding:20px;text-align:center;color:#FFD700;font-size:16px;font-weight:900">🧩 CFOP 計算中...</div>';
+      setTimeout(function(){runCFOPGuided(initState);},50);
+    }else{
+      // Invalid! Try brute-force auto-fix
+      ui.innerHTML='<div style="padding:20px;text-align:center"><div style="color:#FF6B6B;font-size:16px;font-weight:900;margin-bottom:8px">🔧 偵測到掃描誤差</div><div style="color:rgba(255,255,255,.5);font-size:12px">嘗試自動修正中... (檢查 ~1400 種可能)</div></div>';
+      setTimeout(function(){bruteForceFixInWorker(fl,initState);},50);
     }
-  },100);
+  };
+  solverWorker.addEventListener('message',validateHandler);
+  solverWorker.postMessage({t:'validate',fl:fl});
+}
+
+function bruteForceFixInWorker(fl,initState){
+  // Build all candidate swaps and test them in batches via worker
+  var arr=fl.split('');
+  var candidates=[];
+  for(var i=0;i<54;i++){
+    if(i%9===4)continue;
+    for(var j=i+1;j<54;j++){
+      if(j%9===4)continue;
+      if(arr[i]===arr[j])continue;
+      // Quick: swap must keep each color at 9
+      candidates.push([i,j]);
+    }
+  }
+  
+  var ci=0;
+  function tryNext(){
+    if(ci>=candidates.length){
+      // All failed
+      showScanError();
+      return;
+    }
+    var pair=candidates[ci];ci++;
+    var a=arr.slice();
+    var tmp=a[pair[0]];a[pair[0]]=a[pair[1]];a[pair[1]]=tmp;
+    var testFL=a.join('');
+    // Check color counts
+    var cnt={};for(var k=0;k<54;k++){cnt[testFL[k]]=(cnt[testFL[k]]||0)+1;}
+    var ok=true;for(var c in cnt){if(cnt[c]!==9)ok=false;}
+    if(!ok){tryNext();return;}
+    
+    var h=function(e){
+      if(e.data.t!=='valid')return;
+      solverWorker.removeEventListener('message',h);
+      if(e.data.ok){
+        // Fixed! Update faceColors from the fixed facelet string
+        var F2C={U:'W',R:'B',F:'R',D:'Y',L:'G',B:'O'};
+        var faces=['U','R','F','D','L','B'];
+        for(var fi=0;fi<6;fi++){
+          for(var si=0;si<9;si++){
+            faceColors[faces[fi]][si]=F2C[testFL[fi*9+si]];
+          }
+        }
+        ['U','R','F','D','L','B'].forEach(function(f){cubeState[f]=faceColors[f].slice();});
+        var newInit={};['U','R','F','D','L','B'].forEach(function(f){newInit[f]=faceColors[f].slice();});
+        var ui=setupTrainUI();
+        ui.innerHTML='<div style="padding:20px;text-align:center"><div style="color:#00E676;font-size:16px;font-weight:900;margin-bottom:4px">✅ 自動修正成功！</div><div style="font-size:11px;color:rgba(255,255,255,.4)">修正了位置 '+pair[0]+' 和 '+pair[1]+' 的顏色</div></div>';
+        setTimeout(function(){
+          ui.innerHTML='<div style="padding:20px;text-align:center;color:#FFD700;font-size:16px;font-weight:900">🧩 CFOP 計算中...</div>';
+          setTimeout(function(){runCFOPGuided(newInit);},50);
+        },1200);
+      }else{
+        tryNext();
+      }
+    };
+    solverWorker.addEventListener('message',h);
+    solverWorker.postMessage({t:'validate',fl:testFL});
+  }
+  tryNext();
+}
+
+function showScanError(){
+  var ui=setupTrainUI();
+  var h='<div style="padding:20px;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%">';
+  h+='<div style="font-size:40px;margin-bottom:8px">😅</div>';
+  h+='<div style="font-size:18px;font-weight:900;color:#FF6B6B;margin-bottom:6px">魔方小老師看走眼了！</div>';
+  h+='<div style="font-size:13px;color:rgba(255,255,255,.5);margin-bottom:16px;max-width:280px;line-height:1.6">掃描出來的顏色在數學上拼不起來。可能是光線反射或顏色太相近（紅↔橘、藍↔綠）導致的。</div>';
+  h+='<div style="display:flex;flex-direction:column;gap:8px;align-items:center">';
+  h+='<button class="btn" style="font-size:14px;padding:12px 28px" onclick="location.reload()">📸 重拍一次</button>';
+  h+='<button class="btn" style="background:rgba(255,255,255,.06);color:#aaa;font-size:12px;padding:8px 20px" onclick="showTrainingMenu()">← 返回訓練選單</button>';
+  h+='</div></div>';
+  ui.innerHTML=h;
+}
+
+function runCFOPGuided(initState){
+  try{
+    var result=_lbl.cfopEngine(_lbl.clone(initState));
+    var sv=_lbl.solved(),ok=true;
+    ['U','R','F','D','L','B'].forEach(function(f){for(var i=0;i<9;i++){if(result.state[f][i]!==sv[f][i])ok=false;}});
+    if(!ok){showScanError();return;}
+    var stages=[],curStage=null;
+    result.script.forEach(function(seg){
+      if(!curStage||curStage.name!==seg.stage){curStage={name:seg.stage,steps:[],totalMoves:0};stages.push(curStage);}
+      curStage.steps.push(seg);curStage.totalMoves+=seg.moves.length;
+    });
+    showCFOPStageSelect(initState,result,stages);
+  }catch(e){
+    showMsg('❌ 錯誤',e.message,'showTrainingMenu()','← 返回');
+  }
 }
 
 function showCFOPStageSelect(initState,result,stages){
@@ -4827,5 +4976,5 @@ function showMsg(title,desc,action,btnText){
   ui.innerHTML=h;
 }
 </script>
-<div id="versionTag" style="position:fixed;top:4px;right:8px;font-size:10px;color:rgba(255,255,255,.2);z-index:99">v3.1</div>
+<div id="versionTag" style="position:fixed;top:4px;right:8px;font-size:10px;color:rgba(255,255,255,.2);z-index:99">v3.2</div>
 </body></html>
