@@ -336,12 +336,20 @@ function doClassifyCorner(){
 }
 
 function doClassifyInnerCorner(){
-  // NO ROTATION — store exactly as sampled from camera.
-  // User verifies on the staircase diagram and drags to correct.
+  // Face orientation correction (user-verified):
+  // D(黃) = 順轉90° = rot90CW
+  // B(橘) = 逆轉90° = rot90CCW
+  // L(綠) = 逆轉90° = rot90CCW
+  // F, R, U = identity (no rotation)
+  function rot90CW(arr){return[arr[6],arr[3],arr[0],arr[7],arr[4],arr[1],arr[8],arr[5],arr[2]];}
+  function rot90CCW(arr){return[arr[2],arr[5],arr[8],arr[1],arr[4],arr[7],arr[0],arr[3],arr[6]];}
   const rd={};
   ['U','R','F','D','L','B'].forEach(f=>{
     if(rawData[f])rd[f]=rawData[f].map(x=>x.slice?x.slice():[...x]);
   });
+  if(rd['D'])rd['D']=rot90CW(rd['D']);
+  if(rd['B'])rd['B']=rot90CCW(rd['B']);
+  if(rd['L'])rd['L']=rot90CCW(rd['L']);
 
   const FO=['U','R','F','D','L','B'];const all=[];
   FO.forEach(f=>{const r=rd[f];if(!r)return;for(let i=0;i<9;i++)all.push({face:f,pos:i,rgb:r[i],color:null});});
@@ -1197,8 +1205,7 @@ function doClassifyInner(){
     else if(!engineOk)msg+='（引擎無法還原）';
     msg+='<br>請對照魔方手動修正，或按🐛查看除錯</span>';
     document.getElementById('info').innerHTML=msg;
-    showEditableFaces();
-    document.getElementById('btnRow').innerHTML='<button class="btn" onclick="doManualSolve()">✅ 確認後解題</button>';
+    showStaircaseDiagram();
     return;
   }
   if(vid&&vid.srcObject){vid.srcObject.getTracks().forEach(t=>t.stop());vid.srcObject=null;}
@@ -1206,12 +1213,10 @@ function doClassifyInner(){
   document.querySelector('.wrap').style.background='#000';
   if(ov)ov.style.display='none';
   document.getElementById('info').innerHTML='✅ 辨識成功！（已驗證可還原）';
-  showFacePreviews('mgrid');
-  document.getElementById('btnRow').innerHTML='<button class="btn" onclick="doLBLSolve()">🧩 LBL 解題！</button><button class="btn btn-sm" style="margin-top:6px;background:rgba(255,255,255,.12);color:#ccc" onclick="showEditMode()">✏️ 手動修正</button>';
+  showStaircaseDiagram();
 }
 function showEditMode(){
-  showEditableFaces();
-  document.getElementById('btnRow').innerHTML='<button class="btn" onclick="doManualSolve()">✅ 確認後解題</button>';
+  showStaircaseDiagram();
 }
 window._lbl={};
 window.CN={W:"白",B:"藍",R:"紅",Y:"黃",G:"綠",O:"橘"};
@@ -2726,5 +2731,5 @@ function prevMove(){if(solveStep<=0)return;undoMoveOnState(solution[solveStep-1]
 (async function(){try{await navigator.wakeLock.request('screen');}catch(e){}})();
 if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(function(){});}
 </script>
-<div id="versionTag">v24-corner4</div>
+<div id="versionTag">v24-corner6</div>
 </body></html>
