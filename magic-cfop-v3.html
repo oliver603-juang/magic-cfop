@@ -2232,8 +2232,17 @@ function processGalleryImage(img,idx){
     const px=Math.round(sx+(c+.5)*cs),py=Math.round(sy+(r+.5)*cs);
     const half=Math.round(cs*0.15);const sampleSize=half*2+1;
     const d=tctx.getImageData(Math.max(0,px-half),Math.max(0,py-half),sampleSize,sampleSize);
-    let rr=0,gg=0,bb=0;for(let i=0;i<d.data.length;i+=4){rr+=d.data[i];gg+=d.data[i+1];bb+=d.data[i+2];}
-    const n=d.data.length/4;rgbs.push([Math.round(rr/n),Math.round(gg/n),Math.round(bb/n)]);
+    // Robust sampling: use trimmed mean (discard outlier pixels)
+    // This prevents GAN logo text or sticker markings from corrupting the color
+    var pixels=[];for(let i=0;i<d.data.length;i+=4){pixels.push([d.data[i],d.data[i+1],d.data[i+2]]);}
+    if(pixels.length>8){
+      // Sort by luminance, discard top/bottom 20% (logo text = dark outliers on white)
+      pixels.sort(function(a,b){return (a[0]+a[1]+a[2])-(b[0]+b[1]+b[2]);});
+      var trim=Math.floor(pixels.length*0.2);
+      pixels=pixels.slice(trim,pixels.length-trim);
+    }
+    let rr=0,gg=0,bb=0;pixels.forEach(function(p){rr+=p[0];gg+=p[1];bb+=p[2];});
+    const n=pixels.length;rgbs.push([Math.round(rr/n),Math.round(gg/n),Math.round(bb/n)]);
   }
   rawData[SCAN_SEQ[idx].f]=rgbs;
   const mg=document.getElementById('mgrid');mg.style.display='grid';
@@ -2275,8 +2284,10 @@ function doScanCapture(){
   for(let r=0;r<3;r++)for(let c=0;c<3;c++){
     const px=Math.round(sx+(c+.5)*cs),py=Math.round(sy+(r+.5)*cs);
     const d=tctx.getImageData(px-5,py-5,11,11);
-    let rr=0,gg=0,bb=0;for(let i=0;i<d.data.length;i+=4){rr+=d.data[i];gg+=d.data[i+1];bb+=d.data[i+2];}
-    const n=d.data.length/4;rgbs.push([Math.round(rr/n),Math.round(gg/n),Math.round(bb/n)]);
+    var pixels=[];for(let i=0;i<d.data.length;i+=4){pixels.push([d.data[i],d.data[i+1],d.data[i+2]]);}
+    if(pixels.length>8){pixels.sort(function(a,b){return(a[0]+a[1]+a[2])-(b[0]+b[1]+b[2]);});var trim=Math.floor(pixels.length*0.2);pixels=pixels.slice(trim,pixels.length-trim);}
+    let rr=0,gg=0,bb=0;pixels.forEach(function(p){rr+=p[0];gg+=p[1];bb+=p[2];});
+    const n=pixels.length;rgbs.push([Math.round(rr/n),Math.round(gg/n),Math.round(bb/n)]);
   }
   rawData[SCAN_SEQ[scanIdx].f]=rgbs;
   if(navigator.vibrate)navigator.vibrate(80);
@@ -2487,15 +2498,28 @@ function doClassifyInner(){
     return [h,s,v];
   }
 
-  // Delta E distance in LAB space (亮度權重減半 → 對陰影免疫)
+  // Delta E distance in LAB space + HSV saturation guard for white/yellow
   function smartDist(r,g,b,ar,ag,ab,c){
     var [l1,a1,b1]=rgb2lab(r,g,b);
     var [l2,a2,b2]=rgb2lab(ar,ag,ab);
-    // 亮度差減權（陰影只改變亮度，不改變色相）
-    var dl=(l1-l2)*0.4;
+    // Base: LAB Delta E with reduced lightness weight (shadow-resistant)
+    var dl=(l1-l2)*0.5;
     var da=a1-a2;
     var db=b1-b2;
-    return Math.sqrt(dl*dl+da*da+db*db);
+    var deltaE=Math.sqrt(dl*dl+da*da+db*db);
+    
+    // White guard: white has very low saturation in HSV
+    // Without this, bright yellow/green get misclassified as white
+    var [h,s,v]=toHSV(r,g,b);
+    if(c==='W'){
+      // Pixel with high saturation is unlikely to be white
+      if(s>0.25) return deltaE + s*80;
+      return deltaE;
+    }
+    // Non-white anchor: very low-saturation pixels shouldn't match saturated anchors
+    if(s<0.12 && c!=='W') return deltaE + 30;
+    
+    return deltaE;
   }
 
   const nonC=all.filter(s=>s.pos!==4);
