@@ -4334,15 +4334,23 @@ function genOLLState(ollId){
   return s;
 }
 
-// ===== TRAINING MENU =====
-function showTrainingMenu(){
+// ===== TRAINING UI HELPER =====
+function setupTrainUI(){
   try{if(vid&&vid.srcObject){vid.srcObject.getTracks().forEach(function(t){t.stop();});vid.srcObject=null;}}catch(e){}
   if(vid)vid.style.display='none';if(ov)ov.style.display='none';
   document.querySelector('.wrap').style.background='#000';
   document.getElementById('topBar').style.display='none';
   document.getElementById('botBar').style.display='none';
+  var splash=document.getElementById('splashOv');if(splash)splash.style.display='none';
   var ui=document.getElementById('solveUI');
-  ui.style.display='flex';ui.style.flexDirection='column';ui.style.cursor='default';ui.onclick=null;
+  ui.style.cssText='display:flex;flex-direction:column;position:absolute;top:0;left:0;width:100%;height:100%;z-index:50;background:#000;cursor:default;';
+  ui.onclick=null;
+  return ui;
+}
+
+// ===== TRAINING MENU =====
+function showTrainingMenu(){
+  var ui=setupTrainUI();
 
   // Detect current stage
   var initState={};['U','R','F','D','L','B'].forEach(function(f){initState[f]=faceColors[f].slice();});
@@ -4384,6 +4392,11 @@ function showTrainingMenu(){
   h+='</div>';
 
   // Quick links
+  // CFOP 實作模式 (the main feature!)
+  h+='<button class="btn" style="background:linear-gradient(135deg,rgba(0,210,255,.2),rgba(255,215,0,.2));border:1px solid rgba(0,210,255,.3);color:#fff;font-size:14px;font-weight:900;padding:12px 24px;margin-bottom:12px;width:90%;max-width:340px" onclick="startCFOPGuided()">🧩 CFOP 實作解題</button>';
+  h+='<div style="font-size:10px;color:rgba(255,255,255,.35);margin-top:-8px;margin-bottom:12px">引導你用 CFOP 四階段完整解一次魔方</div>';
+
+  // Quick links
   h+='<div style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-bottom:10px">';
   h+='<button class="btn" style="background:rgba(255,255,255,.06);color:#aaa;font-size:11px;padding:6px 12px" onclick="showOLLCatalog()">📖 OLL圖鑑</button>';
   h+='<button class="btn" style="background:rgba(255,255,255,.06);color:#aaa;font-size:11px;padding:6px 12px" onclick="showPLLCatalog()">📖 PLL圖鑑</button>';
@@ -4393,6 +4406,119 @@ function showTrainingMenu(){
   h+='<button class="btn" style="background:rgba(255,255,255,.03);color:rgba(255,255,255,.25);font-size:10px;padding:5px 12px;margin-top:4px" onclick="doCFOPSolve()">🤖 自動解題(跳過訓練)</button>';
   h+='</div>';
   ui.innerHTML=h;
+}
+
+// ===== CFOP GUIDED SOLVE (引導小學生完整解一次) =====
+function startCFOPGuided(){
+  var ui=setupTrainUI();
+  ui.innerHTML='<div style="padding:20px;text-align:center;color:#FFD700;font-size:16px;font-weight:900">🧩 CFOP 計算中...</div>';
+  setTimeout(function(){
+    try{
+      var initState={};['U','R','F','D','L','B'].forEach(function(f){initState[f]=faceColors[f].slice();});
+      var result=_lbl.cfopEngine(_lbl.clone(initState));
+      var sv=_lbl.solved(),ok=true;
+      ['U','R','F','D','L','B'].forEach(function(f){for(var i=0;i<9;i++){if(result.state[f][i]!==sv[f][i])ok=false;}});
+      if(!ok){showMsg('❌ CFOP 無法還原','請確認色塊是否正確','showTrainingMenu()','← 返回');return;}
+      // Build stage breakdown
+      var stages=[],curStage=null;
+      result.script.forEach(function(seg){
+        if(!curStage||curStage.name!==seg.stage){
+          curStage={name:seg.stage,steps:[],totalMoves:0};stages.push(curStage);
+        }
+        curStage.steps.push(seg);
+        curStage.totalMoves+=seg.moves.length;
+      });
+      showCFOPStageSelect(initState,result,stages);
+    }catch(e){
+      showMsg('❌ 錯誤',e.message,'showTrainingMenu()','← 返回');
+    }
+  },100);
+}
+
+function showCFOPStageSelect(initState,result,stages){
+  var ui=setupTrainUI();
+  var totalMoves=result.mc;
+  var stageInfo={
+    Cross:{icon:'✚',color:'#FFFFFF',desc:'做出白色十字',kid:'把4個白色邊塊找到，送到 U 面的正確位置'},
+    F2L:{icon:'🔲',color:'#00D2FF',desc:'配對角塊和邊塊',kid:'找到「好朋友」（角塊+邊塊），配對後一起塞進槽位'},
+    OLL:{icon:'☀️',color:'#FFD500',desc:'讓 D 面全部變黃',kid:'不管側面顏色，先讓底面全部變成黃色'},
+    PLL:{icon:'🎯',color:'#FF6B6B',desc:'排列好所有色塊',kid:'最後一步！讓每一面的顏色都排好'}
+  };
+
+  var h='<div style="padding:14px;text-align:center;overflow-y:auto;height:100%;-webkit-overflow-scrolling:touch">';
+  h+='<div style="font-size:20px;font-weight:900;color:#00D2FF;margin-bottom:2px">🧩 CFOP 實作模式</div>';
+  h+='<div style="font-size:11px;color:rgba(255,255,255,.4);margin-bottom:12px">總共 '+totalMoves+' 步，分 4 個階段完成</div>';
+
+  // Stage overview cards
+  h+='<div style="display:grid;gap:8px;max-width:340px;margin:0 auto 14px">';
+  var moveIdx=0;
+  stages.forEach(function(stg,si){
+    var info=stageInfo[stg.name]||{icon:'?',color:'#fff',desc:'',kid:''};
+    h+='<div style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:12px;text-align:left;display:flex;align-items:center;gap:10px">';
+    h+='<div style="font-size:28px;flex-shrink:0">'+info.icon+'</div>';
+    h+='<div style="flex:1">';
+    h+='<div style="font-weight:800;color:'+info.color+';font-size:15px">Stage '+(si+1)+': '+stg.name+'</div>';
+    h+='<div style="font-size:11px;color:rgba(255,255,255,.5)">'+info.desc+' · '+stg.totalMoves+' 步</div>';
+    h+='<div style="font-size:10px;color:rgba(255,255,255,.3);margin-top:2px">💡 '+info.kid+'</div>';
+    h+='</div></div>';
+    moveIdx+=stg.totalMoves;
+  });
+  h+='</div>';
+
+  // Start button
+  h+='<button class="btn" style="background:linear-gradient(135deg,#00D2FF,#FFD700);color:#000;font-size:16px;font-weight:900;padding:14px 32px;border-radius:14px;margin-bottom:8px" onclick="beginCFOPGuided()">🚀 開始！跟著我一步步解</button>';
+  h+='<br><button onclick="showTrainingMenu()" style="background:none;border:none;color:rgba(255,255,255,.25);cursor:pointer;font-family:inherit;font-size:11px">← 返回訓練選單</button>';
+  h+='</div>';
+  ui.innerHTML=h;
+
+  // Store for later use
+  window._cfopGuidedResult=result;
+  window._cfopGuidedInit=initState;
+}
+
+function beginCFOPGuided(){
+  var result=window._cfopGuidedResult;
+  var initState=window._cfopGuidedInit;
+  if(!result||!initState){showMsg('❌','請重新開始','startCFOPGuided()','🔄 重試');return;}
+  // Use existing solve UI with CFOP stages
+  solveMode='cfop';
+  solution=[];
+  window._lblStageMarkers=[];
+  var idx=0;
+  result.script.forEach(function(seg){
+    window._lblStageMarkers.push({idx:idx,stage:seg.stage,explain:seg.explain});
+    seg.moves.forEach(function(mv){solution.push(mv);idx++;});
+  });
+  // Energy
+  var tmpState={};['U','R','F','D','L','B'].forEach(function(f){tmpState[f]=initState[f].slice();});
+  window._energyAtStep={};window._initialEnergy=_lbl.getEnergyScore?_lbl.getEnergyScore(tmpState):1000;
+  for(var si=0;si<solution.length;si++){
+    _lbl.dm(tmpState,solution[si]);
+    window._energyAtStep[si]=_lbl.getEnergyScore?_lbl.getEnergyScore(tmpState):0;
+  }
+  // Reset faceColors to initState for solving
+  ['U','R','F','D','L','B'].forEach(function(f){faceColors[f]=initState[f].slice();cubeState[f]=initState[f].slice();});
+  // CRITICAL: restore solve UI DOM (training menu overwrites it)
+  _restoreSolveUI();
+  // Start solving UI
+  solveStep=-1;
+  beginSolve();
+}
+// Restore solveUI inner DOM to original structure needed by showSolveStep
+function _restoreSolveUI(){
+  var ui=document.getElementById('solveUI');
+  ui.style.cssText='display:none;cursor:pointer;position:absolute;inset:0;z-index:10;background:#000;flex-direction:column;overflow:hidden;';
+  ui.onclick=function(e){var x=e.clientX;var w=window.innerWidth;if(x>w*0.5)nextMove();else prevMove();};
+  ui.innerHTML='<div id="tGrid" style="flex:0 0 auto;display:grid;grid-template-columns:1fr 1fr 1fr;grid-template-rows:1fr 1fr 1fr;width:140px;height:140px;margin:4px auto 2px;gap:0"></div>'
+  +'<div id="stageLabel"></div>'
+  +'<div style="display:flex;align-items:center;justify-content:center;gap:6px;margin:2px 0">'
+  +'<div style="text-align:center"><div style="font-size:7px;color:rgba(255,255,255,.25)">操作前</div><div class="mgrid" id="beforeGrid" style="display:grid;width:48px;grid-template-columns:repeat(3,1fr);gap:1px;margin:1px auto"></div></div>'
+  +'<div style="text-align:center;min-width:45px"><div style="font-size:26px;font-weight:900;color:#FFD700;font-family:monospace;line-height:1" id="sMoveLabel">-</div><div style="font-size:9px;color:#ddd" id="sMoveDesc">-</div></div>'
+  +'<div id="arrowDiagram" style="flex-shrink:0"></div>'
+  +'<div style="text-align:center"><div style="font-size:7px;color:rgba(255,255,255,.25)">操作後</div><div class="mgrid" id="afterGrid" style="display:grid;width:48px;grid-template-columns:repeat(3,1fr);gap:1px;margin:1px auto"></div></div>'
+  +'</div>'
+  +'<div id="sMoveVis" style="flex:0 0 auto;margin:2px auto;width:170px;height:170px;position:relative"></div>'
+  +'<div id="sMoveProg" style="font-size:11px;color:rgba(255,255,255,.5);text-align:center;margin-top:2px"></div>';
 }
 
 // ===== CROSS/F2L TRAINING (Guided Mode) =====
@@ -4694,5 +4820,5 @@ function showMsg(title,desc,action,btnText){
   ui.innerHTML=h;
 }
 </script>
-<div id="versionTag" style="position:fixed;top:4px;right:8px;font-size:10px;color:rgba(255,255,255,.2);z-index:99">v3.0</div>
+<div id="versionTag" style="position:fixed;top:4px;right:8px;font-size:10px;color:rgba(255,255,255,.2);z-index:99">v3.1</div>
 </body></html>
