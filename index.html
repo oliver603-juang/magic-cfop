@@ -934,51 +934,11 @@ function doClassifyInner(){
     CORNER_POS.forEach(([f1,p1,f2,p2,f3,p3],idx)=>{if(isInvalidPiece([sFC[f1][p1],sFC[f2][p2],sFC[f3][p3]]))bad.push({type:'corner',idx,positions:[[f1,p1],[f2,p2],[f3,p3]]});});
     return bad;
   }
-  // Fix by count-balanced swaps between opposite-color pairs
-  function tryAutoFix(maxIter){
-    for(let iter=0;iter<maxIter;iter++){
-      const bad=getInvalidPieces();if(bad.length===0)return true;
-      const badStickers=[];
-      bad.forEach(b=>b.positions.forEach(([f,p])=>{if(p!==4){const s=nonC.find(x=>x.face===f&&x.pos===p);if(s&&!badStickers.includes(s))badStickers.push(s);}}));
-      badStickers.sort((a,b)=>a.ambiguity-b.ambiguity);
-      let fixed=false;
-      for(const bs of badStickers){
-        const cur=bs.color;
-        for(let ci=0;ci<bs.sortedDists.length;ci++){
-          const alt=bs.sortedDists[ci][0];if(alt===cur)continue;
-          const swaps=nonC.filter(s=>s!==bs&&s.color===alt&&s.pos!==4).sort((a,b)=>a.dists[cur]-b.dists[cur]);
-          for(const sc of swaps){
-            bs.color=alt;sc.color=cur;faceColors[bs.face][bs.pos]=alt;faceColors[sc.face][sc.pos]=cur;
-            if(getInvalidPieces().length<bad.length){fixed=true;break;}
-            bs.color=cur;sc.color=alt;faceColors[bs.face][bs.pos]=cur;faceColors[sc.face][sc.pos]=alt;
-          }
-          if(fixed)break;
-        }
-        if(fixed)break;
-      }
-      if(!fixed)return false;
-    }
-    return getInvalidPieces().length===0;
-  }
-  function tryBruteFix(){
-    const bad=getInvalidPieces();if(bad.length===0)return true;
-    const pairs=[['R','O'],['W','Y'],['B','G']];
-    for(const[cA,cB]of pairs){
-      const gA=nonC.filter(s=>s.color===cA&&s.pos!==4).sort((a,b)=>a.dists[cB]-b.dists[cB]);
-      const gB=nonC.filter(s=>s.color===cB&&s.pos!==4).sort((a,b)=>a.dists[cA]-b.dists[cA]);
-      for(let i=0;i<Math.min(gA.length,4);i++){
-        for(let j=0;j<Math.min(gB.length,4);j++){
-          const sa=gA[i],sb=gB[j];
-          sa.color=cB;sb.color=cA;faceColors[sa.face][sa.pos]=cB;faceColors[sb.face][sb.pos]=cA;
-          if(getInvalidPieces().length<bad.length){if(tryAutoFix(10))return true;if(getInvalidPieces().length<bad.length)return tryBruteFix();}
-          sa.color=cA;sb.color=cB;faceColors[sa.face][sa.pos]=cA;faceColors[sb.face][sb.pos]=cB;
-        }
-      }
-    }
-    return false;
-  }
-  let autoFixed=tryAutoFix(20);
-  if(!autoFixed)autoFixed=tryBruteFix();
+  // === AUTO-FIX DISABLED ===
+  // tryAutoFix/tryBruteFix used standard-position indices (EDGE_POS/CORNER_POS)
+  // to modify faceColors, which stores CAMERA ORDER — wrong indices = data corruption.
+  // User corrects manually on the staircase diagram instead.
+  const autoFixed = (getInvalidPieces().length === 0);
 
   // === BUILD DEBUG INFO ===
   const dbg=[];
@@ -2737,5 +2697,5 @@ function prevMove(){if(solveStep<=0)return;undoMoveOnState(solution[solveStep-1]
 (async function(){try{await navigator.wakeLock.request('screen');}catch(e){}})();
 if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(function(){});}
 </script>
-<div id="versionTag">v24-fold4</div>
+<div id="versionTag">v24-fold5</div>
 </body></html>
