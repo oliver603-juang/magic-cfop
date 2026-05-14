@@ -3764,7 +3764,6 @@ function kidExplain(stage, explain) {
   if(explain.indexOf("最終對齊")>=0) return "🔄 最後微調，完美對齊！";
   return explain;
 }
-var _lastStage = null;
 
 
 // === 6-Face renderFace for T-shape unfolded view ===
@@ -4092,5 +4091,5 @@ function prevMove(){if(solveStep<=0)return;undoMoveOnState(solution[solveStep-1]
 // Wake lock
 (async function(){try{await navigator.wakeLock.request('screen');}catch(e){}})();
 </script>
-<div id="versionTag" style="position:fixed;top:4px;right:8px;font-size:10px;color:rgba(255,255,255,.2);z-index:99">v2.0</div>
+<div id="versionTag" style="position:fixed;top:4px;right:8px;font-size:10px;color:rgba(255,255,255,.2);z-index:99">v2.1</div>
 </body></html>
