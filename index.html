@@ -4811,12 +4811,13 @@ function showGuidedPractice(title,desc,moves,initState,steps,stage){
   window._lblStageMarkers=[];var idx=0;
   steps.forEach(function(st){window._lblStageMarkers.push({idx:idx,stage:stage,explain:st.explain});st.moves.forEach(function(){idx++;});});
   ['U','R','F','D','L','B'].forEach(function(f){cubeState[f]=[...faceColors[f]];});
+  _restoreSolveUI();
   beginSolve();
 }
 
 // ===== UTILITY =====
 function showMsg(title,desc,action,btnText){
-  var ui=document.getElementById('solveUI');
+  var ui=setupTrainUI();
   var h='<div style="padding:20px;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%">';
   h+='<div style="font-size:20px;font-weight:900;color:#FFD500;margin-bottom:6px">'+title+'</div>';
   h+='<div style="font-size:13px;color:rgba(255,255,255,.5);margin-bottom:16px">'+desc+'</div>';
