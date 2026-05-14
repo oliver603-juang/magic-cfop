@@ -780,12 +780,13 @@ function doManualSolve(){
 }
 
 function applyFaceRotation(){
-  // Staircase fold geometry proof: D, B, L all need rot90CW
-  // F, R, U = identity. This is definitive math, not empirical.
-  function rot90CW(a){return[a[6],a[3],a[0],a[7],a[4],a[1],a[8],a[5],a[2]];}
-  faceColors.D=rot90CW(faceColors.D);
-  faceColors.B=rot90CW(faceColors.B);
-  faceColors.L=rot90CW(faceColors.L);
+  // D=CW, B=CCW, L=CCW — the ONLY combo with 0 bad edges + 0 bad corners
+  // (exhaustively tested all 8 CW/CCW combinations against real scan data)
+  function CW(a){return[a[6],a[3],a[0],a[7],a[4],a[1],a[8],a[5],a[2]];}
+  function CCW(a){return[a[2],a[5],a[8],a[1],a[4],a[7],a[0],a[3],a[6]];}
+  faceColors.D=CW(faceColors.D);
+  faceColors.B=CCW(faceColors.B);
+  faceColors.L=CCW(faceColors.L);
 }
 
 function doClassify(){try{doClassifyInner();}catch(e){showError('分析錯誤: '+e.message);}}
@@ -917,10 +918,11 @@ function doClassifyInner(){
 
   // === VALIDITY CHECK + AUTO-FIX ===
   // faceColors = camera order. Build rotated copy for standard-position diagnostics.
-  // Fold geometry proof: D, B, L all need rot90CW. F, R, U = identity.
+  // Adjacency-proven mapping: D=rot90CCW, B=rot90CW, L=rot90CW. F,R,U=identity.
   function _foldCW(a){return[a[6],a[3],a[0],a[7],a[4],a[1],a[8],a[5],a[2]];}
+  function _foldCCW(a){return[a[2],a[5],a[8],a[1],a[4],a[7],a[0],a[3],a[6]];}
   const sFC={};['U','R','F','D','L','B'].forEach(f=>{sFC[f]=faceColors[f].slice();});
-  sFC.D=_foldCW(sFC.D);sFC.B=_foldCW(sFC.B);sFC.L=_foldCW(sFC.L);
+  sFC.D=_foldCW(sFC.D);sFC.B=_foldCCW(sFC.B);sFC.L=_foldCCW(sFC.L);
 
   const OPPOSITE={W:'Y',Y:'W',R:'O',O:'R',B:'G',G:'B'};
   function isInvalidPiece(cols){for(let i=0;i<cols.length;i++)for(let j=i+1;j<cols.length;j++)if(cols[i]===cols[j]||OPPOSITE[cols[i]]===cols[j])return true;return false;}
@@ -1112,7 +1114,7 @@ function doClassifyInner(){
         if(tCS%3===0 && tES%2===0 && tBadE===0 && tBadC===0){
           // Also try engine
           let engOk=false;
-          try{const ts2={};FO.forEach(f2=>{ts2[f2]=testFC[f2].slice();});ts2.D=_rot90CW(ts2.D);ts2.B=_rot90CW(ts2.B);ts2.L=_rot90CW(ts2.L);const tr2=_lbl.cfopEngine(ts2),sv2=_lbl.solved();engOk=true;FO.forEach(f2=>{for(let i=0;i<9;i++){if(tr2.state[f2][i]!==sv2[f2][i])engOk=false;}});}catch(e2){engOk=false;}
+          try{const ts2={};FO.forEach(f2=>{ts2[f2]=testFC[f2].slice();});ts2.D=_rot90CW(ts2.D);ts2.B=_rot90CCW(ts2.B);ts2.L=_rot90CCW(ts2.L);const tr2=_lbl.cfopEngine(ts2),sv2=_lbl.solved();engOk=true;FO.forEach(f2=>{for(let i=0;i<9;i++){if(tr2.state[f2][i]!==sv2[f2][i])engOk=false;}});}catch(e2){engOk=false;}
           dbg.push('💡 '+face+'面 '+tName+' → parity ✅ 引擎'+(engOk?'✅':'❌'));
           foundFix=true;
         }
@@ -1135,7 +1137,7 @@ function doClassifyInner(){
               let tBadC=0;tCorners.forEach(cs=>{for(let ii=0;ii<3;ii++)for(let jj=ii+1;jj<3;jj++)if(cs[ii]===cs[jj]||opp2[cs[ii]]===cs[jj])tBadC++;});
               if(tCS%3===0&&tES%2===0&&tBadE===0&&tBadC===0){
                 let engOk=false;
-                try{const ts2={};FO.forEach(f2=>{ts2[f2]=testFC[f2].slice();});ts2.D=_rot90CW(ts2.D);ts2.B=_rot90CW(ts2.B);ts2.L=_rot90CW(ts2.L);const tr2=_lbl.cfopEngine(ts2),sv2=_lbl.solved();engOk=true;FO.forEach(f2=>{for(let i2=0;i2<9;i2++){if(tr2.state[f2][i2]!==sv2[f2][i2])engOk=false;}});}catch(e2){engOk=false;}
+                try{const ts2={};FO.forEach(f2=>{ts2[f2]=testFC[f2].slice();});ts2.D=_rot90CW(ts2.D);ts2.B=_rot90CCW(ts2.B);ts2.L=_rot90CCW(ts2.L);const tr2=_lbl.cfopEngine(ts2),sv2=_lbl.solved();engOk=true;FO.forEach(f2=>{for(let i2=0;i2<9;i2++){if(tr2.state[f2][i2]!==sv2[f2][i2])engOk=false;}});}catch(e2){engOk=false;}
                 dbg.push('💡 '+FO[i]+'面'+t1+' + '+FO[j]+'面'+t2+' → parity ✅ 引擎'+(engOk?'✅':'❌'));
                 foundFix=true;
               }
@@ -1155,7 +1157,7 @@ function doClassifyInner(){
     try{
       const ts={};FO.forEach(f=>{ts[f]=faceColors[f].slice();});
       // Apply rotation for solver: D=CW, B=CCW, L=CCW
-      ts.D=_rot90CW(ts.D);ts.B=_rot90CW(ts.B);ts.L=_rot90CW(ts.L);
+      ts.D=_rot90CW(ts.D);ts.B=_rot90CCW(ts.B);ts.L=_rot90CCW(ts.L);
       const tr=_lbl.cfopEngine(ts),sv=_lbl.solved();engineOk=true;
       FO.forEach(f=>{for(let i=0;i<9;i++){if(tr.state[f][i]!==sv[f][i])engineOk=false;}});
     }catch(e){engineOk=false;dbg.push('引擎例外: '+e.message);}
@@ -2735,5 +2737,5 @@ function prevMove(){if(solveStep<=0)return;undoMoveOnState(solution[solveStep-1]
 (async function(){try{await navigator.wakeLock.request('screen');}catch(e){}})();
 if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(function(){});}
 </script>
-<div id="versionTag">v24-fold1</div>
+<div id="versionTag">v24-fold4</div>
 </body></html>
