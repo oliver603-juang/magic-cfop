@@ -59,8 +59,7 @@ canvas#ov{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:n
  <div style="font-size:24px;font-weight:900;color:#FFD700">魔方小老師</div>
  <div style="font-size:15px;font-weight:800;color:#00D2FF;margin-top:2px">CFOP v3 速解法</div>
  <div style="font-size:13px;color:rgba(255,255,255,.5);margin-top:10px;max-width:280px;text-align:center;line-height:1.6">📸 拍攝6面 → 🧩 CFOP 速解 · 平均72步<br>全程白色朝上！適合初學者</div>
- <button class="btn" style="margin-top:20px;font-size:18px;padding:16px 40px" onclick="startApp()">📸 逐面掃描（6張）</button>
- <button class="btn" style="margin-top:10px;font-size:16px;padding:14px 36px;background:rgba(255,215,0,.2);color:#FFD700;border:1px solid rgba(255,215,0,.4)" onclick="startCornerScan()">🎯 立體掃描（2張）</button>
+ <button class="btn" style="margin-top:20px;font-size:18px;padding:16px 40px" onclick="startApp()">📸 開始掃描（6張）</button>
  <button class="btn btn-sm" style="margin-top:10px;background:rgba(255,255,255,.12);color:#ccc" onclick="startGallery()">🖼️ 從圖庫上傳 6 張照片</button>
  <button class="btn btn-sm" style="margin-top:6px;background:rgba(255,255,255,.08);color:#999;font-size:11px" onclick="startManual()">✏️ 手動輸入顏色</button>
  <input type="file" id="galleryInput" accept="image/*" multiple style="display:none" onchange="handleGalleryFiles(this.files)">
@@ -139,381 +138,6 @@ function startManual(){
   document.getElementById('btnRow').innerHTML='<button class="btn" onclick="doManualSolve()">🧩 LBL 解題！</button>';
 }
 
-// ===== CORNER-SHOT SCAN (2 photos, 3 faces each) =====
-const CORNER_SHOTS = [
-  { id:1, label:'Shot 1', desc:'白色朝上，紅藍角對準鏡頭',
-    faces:['U','F','R'], colors:['#E8E8E8','#D42020','#1E6ED8'],
-    colorLabels:['白(U)','紅(F)','藍(R)'] },
-  { id:2, label:'Shot 2', desc:'翻轉180°，黃色朝上，橘綠角對準鏡頭',
-    faces:['D','B','L'], colors:['#E8D020','#F07010','#18A040'],
-    colorLabels:['黃(D)','橘(B)','綠(L)'] }
-];
-
-// Isometric projection helper: (x,y,z) -> (px,py), scale=1 per sticker unit
-function isoProject(x,y,z){
-  const c30=0.866025,s30=0.5;
-  return [(x-y)*c30, (x+y)*s30-z];
-}
-
-// Build the SVG overlay path for the isometric cube guide
-function buildIsoGuide(cx,cy,cellPx){
-  const S=cellPx; // pixels per cell
-  const lines=[];
-  function p(x,y,z){const[px,py]=isoProject(x*S,y*S,z*S);return[cx+px,cy+py];}
-  // Outer edges (visible 9 of 12)
-  const v=[[0,0,0],[3,0,0],[3,3,0],[0,3,0],[0,0,3],[3,0,3],[3,3,3],[0,3,3]];
-  const edges=[[4,5],[5,6],[4,7],[5,1],[6,2],[7,3],[4,0],[0,1],[0,3]];
-  const outerPaths=edges.map(([a,b])=>{
-    const pa=p(...v[a]),pb=p(...v[b]);
-    return `M${pa[0].toFixed(1)},${pa[1].toFixed(1)}L${pb[0].toFixed(1)},${pb[1].toFixed(1)}`;
-  });
-  // Grid lines: U face (z=3)
-  const gridPaths=[];
-  for(let i=1;i<3;i++){
-    let a=p(i,0,3),b=p(i,3,3);gridPaths.push(`M${a[0].toFixed(1)},${a[1].toFixed(1)}L${b[0].toFixed(1)},${b[1].toFixed(1)}`);
-    a=p(0,i,3);b=p(3,i,3);gridPaths.push(`M${a[0].toFixed(1)},${a[1].toFixed(1)}L${b[0].toFixed(1)},${b[1].toFixed(1)}`);
-  }
-  // F face (y=0)
-  for(let i=1;i<3;i++){
-    let a=p(i,0,0),b=p(i,0,3);gridPaths.push(`M${a[0].toFixed(1)},${a[1].toFixed(1)}L${b[0].toFixed(1)},${b[1].toFixed(1)}`);
-    a=p(0,0,i);b=p(3,0,i);gridPaths.push(`M${a[0].toFixed(1)},${a[1].toFixed(1)}L${b[0].toFixed(1)},${b[1].toFixed(1)}`);
-  }
-  // R face (x=3)
-  for(let i=1;i<3;i++){
-    let a=p(3,i,0),b=p(3,i,3);gridPaths.push(`M${a[0].toFixed(1)},${a[1].toFixed(1)}L${b[0].toFixed(1)},${b[1].toFixed(1)}`);
-    a=p(3,0,i);b=p(3,3,i);gridPaths.push(`M${a[0].toFixed(1)},${a[1].toFixed(1)}L${b[0].toFixed(1)},${b[1].toFixed(1)}`);
-  }
-  // Cell centers for sampling (row,col within each face)
-  // U face: z=3, x=col, y=row (row0=front, row2=back)
-  const uCenters=[];
-  for(let r=0;r<3;r++)for(let c=0;c<3;c++)uCenters.push(p(c+.5,r+.5,3));
-  // F face: y=0, x=col, z=2.5-row (row0=top)
-  const fCenters=[];
-  for(let r=0;r<3;r++)for(let c=0;c<3;c++)fCenters.push(p(c+.5,0,2.5-r));
-  // R face: x=3, y=col, z=2.5-row (row0=top, col0=front)
-  const rCenters=[];
-  for(let r=0;r<3;r++)for(let c=0;c<3;c++)rCenters.push(p(3,c+.5,2.5-r));
-
-  // Face fill polygons for tinted overlay
-  const uPoly=[p(0,0,3),p(3,0,3),p(3,3,3),p(0,3,3)].map(([x,y])=>x.toFixed(1)+','+y.toFixed(1)).join(' ');
-  const fPoly=[p(0,0,0),p(3,0,0),p(3,0,3),p(0,0,3)].map(([x,y])=>x.toFixed(1)+','+y.toFixed(1)).join(' ');
-  const rPoly=[p(3,0,0),p(3,3,0),p(3,3,3),p(3,0,3)].map(([x,y])=>x.toFixed(1)+','+y.toFixed(1)).join(' ');
-
-  return {outerPaths,gridPaths,uCenters,fCenters,rCenters,uPoly,fPoly,rPoly};
-}
-
-let cornerShotIdx=0;
-async function startCornerScan(){
-  document.getElementById('startOv').classList.remove('show');
-  document.getElementById('startOv').style.display='none';
-  vid=document.getElementById('vid');ov=document.getElementById('ov');octx=ov.getContext('2d');
-  try{
-    const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280},height:{ideal:720}}});
-    vid.srcObject=s;await vid.play();
-    ov.width=vid.videoWidth||720;ov.height=vid.videoHeight||1280;
-    cornerShotIdx=0;rawData={};
-    document.getElementById('topBar').style.display='block';
-    document.getElementById('botBar').style.display='block';
-    showCornerShotUI();
-  }catch(e){alert('相機錯誤: '+e.message);}
-}
-
-function showCornerShotUI(){
-  const shot=CORNER_SHOTS[cornerShotIdx];
-  document.getElementById('title').textContent='🎯 '+shot.label;
-  document.getElementById('sub').textContent=shot.desc;
-  document.getElementById('dots').innerHTML=CORNER_SHOTS.map((_,i)=>'<div class="td'+(i<cornerShotIdx?' done':'')+(i===cornerShotIdx?' now':'')+'"></div>').join('');
-  document.getElementById('info').textContent='對齊魔方到引導框，按拍照';
-  document.getElementById('btnRow').innerHTML='<button class="btn" onclick="captureCornerShot()">📸 拍照</button>';
-  // Draw guide overlay
-  drawCornerGuide();
-  if(!window._cornerRAF)window._cornerRAF=requestAnimationFrame(function loop(){drawCornerGuide();window._cornerRAF=requestAnimationFrame(loop);});
-}
-
-function drawCornerGuide(){
-  if(!octx||!vid)return;
-  const w=ov.width,h=ov.height;
-  octx.clearRect(0,0,w,h);
-  const shot=CORNER_SHOTS[cornerShotIdx];
-  // Cell size: use ~18% of min dimension
-  const cellPx=Math.min(w,h)*0.14;
-  const cx=w*0.5, cy=h*0.45;
-  const g=buildIsoGuide(cx,cy,cellPx);
-  // Semi-transparent face fills
-  octx.globalAlpha=0.08;
-  [['uPoly',shot.colors[0]],['fPoly',shot.colors[1]],['rPoly',shot.colors[2]]].forEach(([key,color])=>{
-    const pts=g[key].split(' ').map(s=>{const[x,y]=s.split(',');return[+x,+y];});
-    octx.fillStyle=color;octx.beginPath();pts.forEach(([x,y],i)=>i?octx.lineTo(x,y):octx.moveTo(x,y));octx.closePath();octx.fill();
-  });
-  octx.globalAlpha=1;
-  // Outer edges
-  octx.strokeStyle='rgba(255,255,255,0.9)';octx.lineWidth=2;
-  g.outerPaths.forEach(d=>{const pts=d.replace('M','').split('L').map(s=>{const[x,y]=s.split(',');return[+x,+y];});octx.beginPath();octx.moveTo(pts[0][0],pts[0][1]);octx.lineTo(pts[1][0],pts[1][1]);octx.stroke();});
-  // Grid lines
-  octx.strokeStyle='rgba(255,255,255,0.4)';octx.lineWidth=1;
-  g.gridPaths.forEach(d=>{const pts=d.replace('M','').split('L').map(s=>{const[x,y]=s.split(',');return[+x,+y];});octx.beginPath();octx.moveTo(pts[0][0],pts[0][1]);octx.lineTo(pts[1][0],pts[1][1]);octx.stroke();});
-  // Sampling dots
-  const dotSets=[
-    {centers:g.uCenters,color:shot.colors[0]},
-    {centers:g.fCenters,color:shot.colors[1]},
-    {centers:g.rCenters,color:shot.colors[2]}
-  ];
-  dotSets.forEach(({centers,color})=>{
-    centers.forEach(([x,y],i)=>{
-      octx.fillStyle=i===4?'#FFD700':color;
-      octx.globalAlpha=i===4?1:0.6;
-      octx.beginPath();octx.arc(x,y,i===4?5:3,0,Math.PI*2);octx.fill();
-    });
-  });
-  octx.globalAlpha=1;
-  // Face labels
-  octx.font='bold 14px sans-serif';octx.textAlign='center';
-  const labelPos=[g.uCenters[4],g.fCenters[4],g.rCenters[4]];
-  shot.colorLabels.forEach((lbl,i)=>{
-    const[x,y]=labelPos[i];
-    octx.fillStyle='rgba(0,0,0,0.6)';octx.fillRect(x-22,y+8,44,16);
-    octx.fillStyle='#fff';octx.fillText(lbl,x,y+20);
-  });
-}
-
-function captureCornerShot(){
-  if(window._cornerRAF){cancelAnimationFrame(window._cornerRAF);window._cornerRAF=null;}
-  const shot=CORNER_SHOTS[cornerShotIdx];
-  const w=vid.videoWidth,h=vid.videoHeight;
-  const tc=document.createElement('canvas');tc.width=w;tc.height=h;
-  const tctx=tc.getContext('2d');tctx.drawImage(vid,0,0,w,h);
-  const cellPx=Math.min(w,h)*0.14;
-  const cx=w*0.5,cy=h*0.45;
-  const g=buildIsoGuide(cx,cy,cellPx);
-  // Sample each face's 9 cells
-  const sampleRadius=Math.max(3,Math.round(cellPx*0.12));
-  function sampleAt(px,py){
-    const r=sampleRadius,d=tctx.getImageData(Math.max(0,Math.round(px)-r),Math.max(0,Math.round(py)-r),r*2+1,r*2+1);
-    let rr=0,gg=0,bb=0;for(let i=0;i<d.data.length;i+=4){rr+=d.data[i];gg+=d.data[i+1];bb+=d.data[i+2];}
-    const n=d.data.length/4;return[Math.round(rr/n),Math.round(gg/n),Math.round(bb/n)];
-  }
-  // U/D face (top), F/B face (left), R/L face (right) — no rotation needed!
-  const topFace=shot.faces[0], leftFace=shot.faces[1], rightFace=shot.faces[2];
-  rawData[topFace]=g.uCenters.map(([x,y])=>sampleAt(x,y));
-  rawData[leftFace]=g.fCenters.map(([x,y])=>sampleAt(x,y));
-  rawData[rightFace]=g.rCenters.map(([x,y])=>sampleAt(x,y));
-
-  // Show sampled colors preview
-  const mg=document.getElementById('mgrid');mg.style.display='grid';
-  const allRGB=[...rawData[topFace],...rawData[leftFace],...rawData[rightFace]];
-  mg.style.gridTemplateColumns='repeat(9,1fr)';
-  mg.innerHTML=allRGB.map(([r,g,b],i)=>'<div class="mcell" style="background:rgb('+r+','+g+','+b+')">'+(i%9===4?'⭐':'')+'</div>').join('');
-  document.getElementById('info').textContent='✅ '+shot.label+' 完成！'+shot.faces.join('+')+' 各9格';
-  if(cornerShotIdx<1){
-    document.getElementById('btnRow').innerHTML='<button class="btn" onclick="nextCornerShot()">▶️ 翻轉拍第2面</button><button class="btn" style="margin-top:6px;background:rgba(255,255,255,.12);color:#ccc;font-size:12px;padding:8px 16px" onclick="retakeCornerShot()">🔄 重拍</button>';
-  }else{
-    document.getElementById('btnRow').innerHTML='<button class="btn" onclick="finishCornerScan()">🔍 分析顏色</button><button class="btn" style="margin-top:6px;background:rgba(255,255,255,.12);color:#ccc;font-size:12px;padding:8px 16px" onclick="retakeCornerShot()">🔄 重拍</button>';
-  }
-}
-
-function nextCornerShot(){
-  cornerShotIdx=1;
-  showCornerShotUI();
-}
-
-function retakeCornerShot(){
-  showCornerShotUI();
-}
-
-function finishCornerScan(){
-  // Stop camera
-  if(vid&&vid.srcObject){vid.srcObject.getTracks().forEach(t=>t.stop());vid.style.display='none';}
-  if(window._cornerRAF){cancelAnimationFrame(window._cornerRAF);window._cornerRAF=null;}
-  // Corner-shot data needs NO rotation — sampling coordinates are already in standard orientation
-  scanIdx=6;
-  doClassifyCorner();
-}
-
-function doClassifyCorner(){
-  // Corner-shot samples need face remapping (staircase→box folding)
-  // then standard smartDist + auction classification
-  try{ doClassifyInnerCorner(); }catch(e){ showError('分析錯誤: '+e.message); }
-}
-
-function doClassifyInnerCorner(){
-  // === NO ROTATION HERE ===
-  // faceColors stores camera order. Rotation applied only at solve time.
-  const rd={};
-  ['U','R','F','D','L','B'].forEach(f=>{
-    if(rawData[f])rd[f]=rawData[f].map(x=>x.slice?x.slice():[...x]);
-  });
-
-  const FO=['U','R','F','D','L','B'];const all=[];
-  FO.forEach(f=>{const r=rd[f];if(!r)return;for(let i=0;i<9;i++)all.push({face:f,pos:i,rgb:r[i],color:null});});
-  if(all.length!==54){showError('只有'+all.length+'個色塊');return;}
-
-  // Build anchors from centers
-  const anchors={};
-  function _sat(r,g,b){const mx=Math.max(r,g,b);return mx>0?(mx-Math.min(r,g,b))/mx:0;}
-  FO.forEach(f=>{
-    if(f==='U'){
-      // GAN logo fix: pick lowest-saturation among 4 offset samples
-      const center=rd[f][4];
-      const sat=_sat(...center);
-      if(sat>0.3){
-        // Center contaminated by logo, use fallback
-        let bestSat=1,bestRGB=center;
-        rd[f].forEach((rgb,i)=>{if(i===4)return;const s=_sat(...rgb);if(s<bestSat){bestSat=s;bestRGB=rgb;}});
-        anchors[CC[f]]=bestRGB;
-      }else{anchors[CC[f]]=center;}
-    }else{anchors[CC[f]]=rd[f][4];}
-  });
-  all.forEach(s=>{if(s.pos===4)s.color=CC[s.face];});
-
-  // smartDist + auction (same as doClassifyInner)
-  const nonC=all.filter(s=>s.pos!==4);
-  nonC.forEach(s=>{s.dists={};Object.entries(anchors).forEach(([c,[ar,ag,ab]])=>{const[r,g,b]=s.rgb;s.dists[c]=smartDist(r,g,b,ar,ag,ab,c);});});
-  const quota={W:8,R:8,B:8,O:8,G:8,Y:8};
-  nonC.forEach(s=>{let best=null,bestD=Infinity;Object.entries(s.dists).forEach(([c,d])=>{if(d<bestD){bestD=d;best=c;}});s.color=best;});
-  for(let iter=0;iter<200;iter++){
-    const cnt={W:0,R:0,B:0,O:0,G:0,Y:0};nonC.forEach(s=>cnt[s.color]++);
-    const over=Object.keys(cnt).find(c=>cnt[c]>quota[c]);if(!over)break;
-    const inOver=nonC.filter(s=>s.color===over);
-    let bs=null,bc=Infinity;
-    inOver.forEach(s=>{const curD=s.dists[over];Object.entries(s.dists).forEach(([c,d])=>{if(c===over||cnt[c]>=quota[c])return;const p=d-curD;if(p<bc){bc=p;bs={s,to:c};}});});
-    if(bs)bs.s.color=bs.to;
-    else{const under=Object.keys(cnt).find(c=>cnt[c]<quota[c]);if(!under)break;let b2=null,bD2=Infinity;inOver.forEach(s=>{if(s.dists[under]<bD2){bD2=s.dists[under];b2=s;}});if(b2)b2.color=under;else break;}
-  }
-  nonC.forEach(s=>{const sorted=Object.entries(s.dists).sort((a,b)=>a[1]-b[1]);s.sortedDists=sorted;s.bestDist=sorted[0][1];s.secondColor=sorted[1][0];s.secondDist=sorted[1][1];s.ambiguity=s.secondDist>0?(s.secondDist-s.bestDist)/s.secondDist:1;});
-  FO.forEach(f=>{faceColors[f]=all.filter(s=>s.face===f).sort((a,b)=>a.pos-b.pos).map(s=>s.color);});
-
-  // Show results on staircase diagram with drag-to-swap
-  showStaircaseDiagram();
-}
-
-function showStaircaseDiagram(){
-  // Build staircase layout: F-R / D-B / L-U (as seen in camera order)
-  const STAIR=[
-    {f:'F',label:'紅(F)',row:0,col:0},{f:'R',label:'藍(R)',row:0,col:1},
-    {f:'D',label:'黃(D)',row:1,col:1},{f:'B',label:'橘(B)',row:1,col:2},
-    {f:'L',label:'綠(L)',row:2,col:2},{f:'U',label:'白(U)',row:2,col:3}
-  ];
-  const cellSz=window.innerWidth<500?28:36;
-  const gap=2;
-  const faceSz=cellSz*3+gap*2;
-  const faceGap=4;
-  const totalW=(faceSz+faceGap)*4;
-  const totalH=(faceSz+faceGap)*3+60;
-  const mg=document.getElementById('mgrid');
-  mg.style.display='block';
-  mg.style.overflow='auto';
-  let html='<div style="position:relative;width:'+totalW+'px;height:'+totalH+'px;margin:0 auto" id="staircaseWrap">';
-  // Title
-  html+='<div style="position:absolute;top:0;left:0;width:100%;text-align:center;font-size:13px;color:#FFD700">階梯圖（拖曳色塊交換位置）</div>';
-  // Draw adjacency connectors (arrows between stair steps)
-  const connectors=[
-    {label:'左轉',x1:0,y1:0,x2:1,y2:0},
-    {label:'上翻',x1:1,y1:0,x2:1,y2:1},
-    {label:'左轉',x1:1,y1:1,x2:2,y2:1},
-    {label:'上翻',x1:2,y1:1,x2:2,y2:2},
-    {label:'左轉',x1:2,y1:2,x2:3,y2:2}
-  ];
-  STAIR.forEach(({f,label,row,col})=>{
-    const ox=col*(faceSz+faceGap);
-    const oy=row*(faceSz+faceGap)+24;
-    // Face label
-    html+='<div style="position:absolute;left:'+ox+'px;top:'+(oy-14)+'px;width:'+faceSz+'px;text-align:center;font-size:10px;color:rgba(255,255,255,.5)">'+label+'</div>';
-    // 3x3 grid
-    for(let r=0;r<3;r++)for(let c=0;c<3;c++){
-      const idx=r*3+c;
-      const color=faceColors[f][idx];
-      const x=ox+c*(cellSz+gap);
-      const y=oy+r*(cellSz+gap);
-      const isCenter=idx===4;
-      html+='<div class="stcell" data-face="'+f+'" data-pos="'+idx+'" draggable="'+(isCenter?'false':'true')+'" style="position:absolute;left:'+x+'px;top:'+y+'px;width:'+cellSz+'px;height:'+cellSz+'px;background:'+CMAP[color]+';border:1px solid rgba(0,0,0,.3);border-radius:3px;cursor:'+(isCenter?'default':'grab')+';display:flex;align-items:center;justify-content:center;font-size:9px;color:'+(color==='W'||color==='Y'?'#333':'#fff')+';user-select:none;'+(isCenter?'box-shadow:inset 0 0 0 2px #FFD700;':'')+'">'+CN[color]+'</div>';
-    }
-  });
-  html+='</div>';
-  mg.innerHTML=html;
-  // Add drag-and-drop handlers
-  initStaircaseDrag();
-  // Show instruction + solve button
-  document.getElementById('title').textContent='🎯 階梯確認';
-  document.getElementById('sub').textContent='拖曳色塊交換位置，中心格固定';
-  document.getElementById('info').innerHTML='<span style="color:#FFD700">請對照魔方確認每個色塊正確</span>';
-  document.getElementById('btnRow').innerHTML='<button class="btn" onclick="doManualSolve()">✅ 確認後解題</button>';
-}
-
-function initStaircaseDrag(){
-  let dragSrc=null;
-  const wrap=document.getElementById('staircaseWrap');
-  if(!wrap)return;
-  wrap.addEventListener('dragstart',function(e){
-    const el=e.target.closest('.stcell');
-    if(!el||el.dataset.pos==='4')return;
-    dragSrc=el;
-    el.style.opacity='0.4';
-    e.dataTransfer.effectAllowed='move';
-    e.dataTransfer.setData('text/plain','');
-  });
-  wrap.addEventListener('dragover',function(e){e.preventDefault();e.dataTransfer.dropEffect='move';});
-  wrap.addEventListener('drop',function(e){
-    e.preventDefault();
-    const el=e.target.closest('.stcell');
-    if(!el||!dragSrc||el===dragSrc)return;
-    if(el.dataset.pos==='4'||dragSrc.dataset.pos==='4')return;
-    // Swap colors
-    const f1=dragSrc.dataset.face,p1=+dragSrc.dataset.pos;
-    const f2=el.dataset.face,p2=+el.dataset.pos;
-    const tmp=faceColors[f1][p1];
-    faceColors[f1][p1]=faceColors[f2][p2];
-    faceColors[f2][p2]=tmp;
-    showStaircaseDiagram();
-  });
-  wrap.addEventListener('dragend',function(e){
-    if(dragSrc)dragSrc.style.opacity='1';
-    dragSrc=null;
-  });
-  // Touch support for mobile
-  let touchSrc=null,touchClone=null;
-  wrap.addEventListener('touchstart',function(e){
-    const el=e.target.closest('.stcell');
-    if(!el||el.dataset.pos==='4')return;
-    touchSrc=el;
-    // Create floating clone
-    touchClone=el.cloneNode(true);
-    touchClone.style.position='fixed';
-    touchClone.style.zIndex='9999';
-    touchClone.style.opacity='0.8';
-    touchClone.style.pointerEvents='none';
-    touchClone.style.transform='scale(1.2)';
-    document.body.appendChild(touchClone);
-    const t=e.touches[0];
-    touchClone.style.left=(t.clientX-18)+'px';
-    touchClone.style.top=(t.clientY-18)+'px';
-    el.style.opacity='0.3';
-  },{passive:true});
-  wrap.addEventListener('touchmove',function(e){
-    if(!touchClone)return;
-    e.preventDefault();
-    const t=e.touches[0];
-    touchClone.style.left=(t.clientX-18)+'px';
-    touchClone.style.top=(t.clientY-18)+'px';
-  },{passive:false});
-  wrap.addEventListener('touchend',function(e){
-    if(!touchSrc){return;}
-    if(touchClone){touchClone.remove();touchClone=null;}
-    touchSrc.style.opacity='1';
-    const t=e.changedTouches[0];
-    const dropEl=document.elementFromPoint(t.clientX,t.clientY);
-    const target=dropEl?dropEl.closest('.stcell'):null;
-    if(target&&target!==touchSrc&&target.dataset.pos!=='4'){
-      const f1=touchSrc.dataset.face,p1=+touchSrc.dataset.pos;
-      const f2=target.dataset.face,p2=+target.dataset.pos;
-      const tmp=faceColors[f1][p1];
-      faceColors[f1][p1]=faceColors[f2][p2];
-      faceColors[f2][p2]=tmp;
-      showStaircaseDiagram();
-    }
-    touchSrc=null;
-  });
-}
-
 // ===== GALLERY UPLOAD =====
 function startGallery(){
   document.getElementById('galleryInput').click();
@@ -521,7 +145,7 @@ function startGallery(){
 function handleGalleryFiles(files){
   if(!files||files.length===0)return;
   const imgs=Array.from(files).filter(f=>f.type.startsWith('image/'));
-  if(imgs.length<6){alert('請選擇 6 張照片（順序：F紅→R藍→D黃→B橘→L綠→U白）');return;}
+  if(imgs.length<6){alert('請選擇 6 張照片（順序：F紅→R藍→B橘→L綠→U白→D黃）');return;}
   if(imgs.length>6)imgs.length=6;
   // Sort by name to maintain order
   imgs.sort((a,b)=>a.name.localeCompare(b.name));
@@ -924,7 +548,7 @@ function doClassifyInner(){
   // === AUTO-FIX DISABLED ===
   // tryAutoFix/tryBruteFix used standard-position indices (EDGE_POS/CORNER_POS)
   // to modify faceColors, which stores CAMERA ORDER — wrong indices = data corruption.
-  // User corrects manually on the staircase diagram instead.
+  // User corrects manually via showEditableFaces.
   const autoFixed = (getInvalidPieces().length === 0);
 
   // === BUILD DEBUG INFO ===
@@ -1158,7 +782,8 @@ function doClassifyInner(){
     else if(!engineOk)msg+='（引擎無法還原）';
     msg+='<br>請對照魔方手動修正，或按🐛查看除錯</span>';
     document.getElementById('info').innerHTML=msg;
-    showStaircaseDiagram();
+    showEditableFaces();
+    document.getElementById('btnRow').innerHTML='<button class="btn" onclick="doManualSolve()">✅ 確認後解題</button>';
     return;
   }
   if(vid&&vid.srcObject){vid.srcObject.getTracks().forEach(t=>t.stop());vid.srcObject=null;}
@@ -1166,10 +791,12 @@ function doClassifyInner(){
   document.querySelector('.wrap').style.background='#000';
   if(ov)ov.style.display='none';
   document.getElementById('info').innerHTML='✅ 辨識成功！（已驗證可還原）';
-  showStaircaseDiagram();
+  showFacePreviews('mgrid');
+  document.getElementById('btnRow').innerHTML='<button class="btn" onclick="doLBLSolve()">🧩 開始解題！</button><button class="btn btn-sm" style="margin-top:6px;background:rgba(255,255,255,.12);color:#ccc" onclick="showEditMode()">✏️ 手動修正</button>';
 }
 function showEditMode(){
-  showStaircaseDiagram();
+  showEditableFaces();
+  document.getElementById('btnRow').innerHTML='<button class="btn" onclick="doManualSolve()">✅ 確認後解題</button>';
 }
 window._lbl={};
 window.CN={W:"白",B:"藍",R:"紅",Y:"黃",G:"綠",O:"橘"};
@@ -2684,5 +2311,5 @@ function prevMove(){if(solveStep<=0)return;undoMoveOnState(solution[solveStep-1]
 (async function(){try{await navigator.wakeLock.request('screen');}catch(e){}})();
 if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(function(){});}
 </script>
-<div id="versionTag">v24-nospin</div>
+<div id="versionTag">v25-clean</div>
 </body></html>
