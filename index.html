@@ -2332,7 +2332,45 @@ function startKociemba(){
 
 function startCFOP(){
   solveMode='cfop';
-  doCFOPSolve();
+  // CFOP also needs autoRepair first — CFOP engine has no error tolerance
+  let fl='';['U','R','F','D','L','B'].forEach(f=>{faceColors[f].forEach(x=>fl+=C2F[x]||'?');});
+  document.getElementById('info').textContent='🧮 驗證色塊中...';
+  document.getElementById('btnRow').innerHTML='';
+  if(!solverWorker)initSolver();
+  tryAutoRepairThenCFOP(fl,0);
+}
+
+function tryAutoRepairThenCFOP(fl,attempt){
+  if(attempt>10){
+    document.getElementById('info').innerHTML='<span style="color:#E94560">自動修正失敗，請手動確認顏色</span>';
+    showEditableFaces();
+    document.getElementById('btnRow').innerHTML='<button class="btn" onclick="showModeSelect()">🧩 重新選擇</button>';
+    return;
+  }
+  if(solverWorker)solverWorker.terminate();
+  initSolver();
+  let wc=0;
+  function sendWhenReady(){
+    wc++;
+    if(solverReady)doSend();
+    else if(wc>100){tryAutoRepairThenCFOP(fl,attempt);}
+    else setTimeout(sendWhenReady,100);
+  }
+  function doSend(){
+    const to=setTimeout(()=>{
+      solverWorker.terminate();solverCB=null;
+      tryAutoRepairThenCFOP(fl,attempt+1);
+    },4000);
+    solverCB=(err,sol)=>{
+      clearTimeout(to);
+      if(err){tryAutoRepairThenCFOP(fl,attempt+1);return;}
+      // Kociemba validated the state — now run CFOP
+      document.getElementById('info').textContent='✅ 色塊驗證通過，CFOP 計算中...'+(attempt>0?' (修正'+attempt+'次)':'');
+      setTimeout(()=>doCFOPSolve(),200);
+    };
+    solverWorker.postMessage({t:'solve',fl});
+  }
+  sendWhenReady();
 }
 
 // ===== AUTO REPAIR (Kociemba) =====
@@ -4091,5 +4129,5 @@ function prevMove(){if(solveStep<=0)return;undoMoveOnState(solution[solveStep-1]
 // Wake lock
 (async function(){try{await navigator.wakeLock.request('screen');}catch(e){}})();
 </script>
-<div id="versionTag" style="position:fixed;top:4px;right:8px;font-size:10px;color:rgba(255,255,255,.2);z-index:99">v2.1</div>
+<div id="versionTag" style="position:fixed;top:4px;right:8px;font-size:10px;color:rgba(255,255,255,.2);z-index:99">v2.2</div>
 </body></html>
