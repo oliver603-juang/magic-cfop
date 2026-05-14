@@ -84,11 +84,11 @@ canvas#ov{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:n
 // ===== CONSTANTS =====
 const SCAN_SEQ=[
   {f:'F',name:'❶ 前紅',guide:'白色朝上，紅色面對鏡頭'},
-  {f:'R',name:'❷ 右藍',guide:'整顆左轉 90°（藍色面對鏡頭）'},
-  {f:'D',name:'❸ 下黃',guide:'整顆往上翻 90°（黃色面對鏡頭）'},
-  {f:'B',name:'❹ 後橘',guide:'整顆左轉 90°（橘色面對鏡頭）'},
-  {f:'L',name:'❺ 左綠',guide:'整顆往上翻 90°（綠色面對鏡頭）'},
-  {f:'U',name:'❻ 上白',guide:'整顆左轉 90°（白色面對鏡頭）'},
+  {f:'R',name:'❷ 右藍',guide:'順時針轉 90°（藍色面對鏡頭）'},
+  {f:'B',name:'❸ 後橘',guide:'再轉 90°（橘色面對鏡頭）'},
+  {f:'L',name:'❹ 左綠',guide:'再轉 90°（綠色面對鏡頭）'},
+  {f:'U',name:'❺ 上白',guide:'轉回前紅，往前傾（白色面對鏡頭）'},
+  {f:'D',name:'❻ 下黃',guide:'往後傾 180°（黃色面對鏡頭）'},
 ];
 const CMAP={W:'#FFFFFF',R:'#B71234',B:'#0046AD',O:'#FF5800',G:'#009B48',Y:'#FFD500'};
 const CC={F:'R',R:'B',B:'O',L:'G',U:'W',D:'Y'};
@@ -774,20 +774,11 @@ function doManualSolve(){
   const cnt={};['U','R','F','D','L','B'].forEach(f=>faceColors[f].forEach(c=>{cnt[c]=(cnt[c]||0)+1;}));
   const ok=Object.values(cnt).every(v=>v===9)&&Object.keys(cnt).length===6;
   if(!ok){showError('每個顏色必須剛好 9 個！目前: '+Object.entries(cnt).map(([c,n])=>CN[c]+':'+n).join(' '));return;}
-  // Apply rotation: faceColors is camera order → convert to standard positions for solver
-  applyFaceRotation();
+  // No rotation needed — scan order F→R→B→L→U→D keeps U-up orientation
   doLBLSolve();
 }
 
-function applyFaceRotation(){
-  // D=CW, B=CCW, L=CCW — the ONLY combo with 0 bad edges + 0 bad corners
-  // (exhaustively tested all 8 CW/CCW combinations against real scan data)
-  function CW(a){return[a[6],a[3],a[0],a[7],a[4],a[1],a[8],a[5],a[2]];}
-  function CCW(a){return[a[2],a[5],a[8],a[1],a[4],a[7],a[0],a[3],a[6]];}
-  faceColors.D=CW(faceColors.D);
-  faceColors.B=CCW(faceColors.B);
-  faceColors.L=CCW(faceColors.L);
-}
+// No applyFaceRotation needed — scan order F→R→B→L→U→D preserves U-up orientation
 
 function doClassify(){try{doClassifyInner();}catch(e){showError('分析錯誤: '+e.message);}}
 function doClassifyInner(){
@@ -917,12 +908,8 @@ function doClassifyInner(){
   FO.forEach(f=>{faceColors[f]=all.filter(s=>s.face===f).sort((a,b)=>a.pos-b.pos).map(s=>s.color);});
 
   // === VALIDITY CHECK + AUTO-FIX ===
-  // faceColors = camera order. Build rotated copy for standard-position diagnostics.
-  // Adjacency-proven mapping: D=rot90CCW, B=rot90CW, L=rot90CW. F,R,U=identity.
-  function _foldCW(a){return[a[6],a[3],a[0],a[7],a[4],a[1],a[8],a[5],a[2]];}
-  function _foldCCW(a){return[a[2],a[5],a[8],a[1],a[4],a[7],a[0],a[3],a[6]];}
+  // No rotation needed — scan order F→R→B→L→U→D keeps U-up orientation
   const sFC={};['U','R','F','D','L','B'].forEach(f=>{sFC[f]=faceColors[f].slice();});
-  sFC.D=_foldCW(sFC.D);sFC.B=_foldCCW(sFC.B);sFC.L=_foldCCW(sFC.L);
 
   const OPPOSITE={W:'Y',Y:'W',R:'O',O:'R',B:'G',G:'B'};
   function isInvalidPiece(cols){for(let i=0;i<cols.length;i++)for(let j=i+1;j<cols.length;j++)if(cols[i]===cols[j]||OPPOSITE[cols[i]]===cols[j])return true;return false;}
@@ -1074,7 +1061,7 @@ function doClassifyInner(){
         if(tCS%3===0 && tES%2===0 && tBadE===0 && tBadC===0){
           // Also try engine
           let engOk=false;
-          try{const ts2={};FO.forEach(f2=>{ts2[f2]=testFC[f2].slice();});ts2.D=_rot90CW(ts2.D);ts2.B=_rot90CCW(ts2.B);ts2.L=_rot90CCW(ts2.L);const tr2=_lbl.cfopEngine(ts2),sv2=_lbl.solved();engOk=true;FO.forEach(f2=>{for(let i=0;i<9;i++){if(tr2.state[f2][i]!==sv2[f2][i])engOk=false;}});}catch(e2){engOk=false;}
+          try{const ts2={};FO.forEach(f2=>{ts2[f2]=testFC[f2].slice();});const tr2=_lbl.cfopEngine(ts2),sv2=_lbl.solved();engOk=true;FO.forEach(f2=>{for(let i=0;i<9;i++){if(tr2.state[f2][i]!==sv2[f2][i])engOk=false;}});}catch(e2){engOk=false;}
           dbg.push('💡 '+face+'面 '+tName+' → parity ✅ 引擎'+(engOk?'✅':'❌'));
           foundFix=true;
         }
@@ -1097,7 +1084,7 @@ function doClassifyInner(){
               let tBadC=0;tCorners.forEach(cs=>{for(let ii=0;ii<3;ii++)for(let jj=ii+1;jj<3;jj++)if(cs[ii]===cs[jj]||opp2[cs[ii]]===cs[jj])tBadC++;});
               if(tCS%3===0&&tES%2===0&&tBadE===0&&tBadC===0){
                 let engOk=false;
-                try{const ts2={};FO.forEach(f2=>{ts2[f2]=testFC[f2].slice();});ts2.D=_rot90CW(ts2.D);ts2.B=_rot90CCW(ts2.B);ts2.L=_rot90CCW(ts2.L);const tr2=_lbl.cfopEngine(ts2),sv2=_lbl.solved();engOk=true;FO.forEach(f2=>{for(let i2=0;i2<9;i2++){if(tr2.state[f2][i2]!==sv2[f2][i2])engOk=false;}});}catch(e2){engOk=false;}
+                try{const ts2={};FO.forEach(f2=>{ts2[f2]=testFC[f2].slice();});const tr2=_lbl.cfopEngine(ts2),sv2=_lbl.solved();engOk=true;FO.forEach(f2=>{for(let i2=0;i2<9;i2++){if(tr2.state[f2][i2]!==sv2[f2][i2])engOk=false;}});}catch(e2){engOk=false;}
                 dbg.push('💡 '+FO[i]+'面'+t1+' + '+FO[j]+'面'+t2+' → parity ✅ 引擎'+(engOk?'✅':'❌'));
                 foundFix=true;
               }
@@ -1111,13 +1098,13 @@ function doClassifyInner(){
 
   // Final: actually test CFOP engine (need to rotate for standard positions)
   let engineOk=false;
-  function _rot90CW(a){return[a[6],a[3],a[0],a[7],a[4],a[1],a[8],a[5],a[2]];}
-  function _rot90CCW(a){return[a[2],a[5],a[8],a[1],a[4],a[7],a[0],a[3],a[6]];}
+  
+  
   if(autoFixed){
     try{
       const ts={};FO.forEach(f=>{ts[f]=faceColors[f].slice();});
       // Apply rotation for solver: D=CW, B=CCW, L=CCW
-      ts.D=_rot90CW(ts.D);ts.B=_rot90CCW(ts.B);ts.L=_rot90CCW(ts.L);
+      
       const tr=_lbl.cfopEngine(ts),sv=_lbl.solved();engineOk=true;
       FO.forEach(f=>{for(let i=0;i<9;i++){if(tr.state[f][i]!==sv[f][i])engineOk=false;}});
     }catch(e){engineOk=false;dbg.push('引擎例外: '+e.message);}
@@ -2697,5 +2684,5 @@ function prevMove(){if(solveStep<=0)return;undoMoveOnState(solution[solveStep-1]
 (async function(){try{await navigator.wakeLock.request('screen');}catch(e){}})();
 if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(function(){});}
 </script>
-<div id="versionTag">v24-fold5</div>
+<div id="versionTag">v24-nospin</div>
 </body></html>
