@@ -2232,8 +2232,17 @@ function processGalleryImage(img,idx){
     const px=Math.round(sx+(c+.5)*cs),py=Math.round(sy+(r+.5)*cs);
     const half=Math.round(cs*0.15);const sampleSize=half*2+1;
     const d=tctx.getImageData(Math.max(0,px-half),Math.max(0,py-half),sampleSize,sampleSize);
-    let rr=0,gg=0,bb=0;for(let i=0;i<d.data.length;i+=4){rr+=d.data[i];gg+=d.data[i+1];bb+=d.data[i+2];}
-    const n=d.data.length/4;rgbs.push([Math.round(rr/n),Math.round(gg/n),Math.round(bb/n)]);
+    // Robust sampling: use trimmed mean (discard outlier pixels)
+    // This prevents GAN logo text or sticker markings from corrupting the color
+    var pixels=[];for(let i=0;i<d.data.length;i+=4){pixels.push([d.data[i],d.data[i+1],d.data[i+2]]);}
+    if(pixels.length>8){
+      // Sort by luminance, discard top/bottom 20% (logo text = dark outliers on white)
+      pixels.sort(function(a,b){return (a[0]+a[1]+a[2])-(b[0]+b[1]+b[2]);});
+      var trim=Math.floor(pixels.length*0.2);
+      pixels=pixels.slice(trim,pixels.length-trim);
+    }
+    let rr=0,gg=0,bb=0;pixels.forEach(function(p){rr+=p[0];gg+=p[1];bb+=p[2];});
+    const n=pixels.length;rgbs.push([Math.round(rr/n),Math.round(gg/n),Math.round(bb/n)]);
   }
   rawData[SCAN_SEQ[idx].f]=rgbs;
   const mg=document.getElementById('mgrid');mg.style.display='grid';
@@ -2275,8 +2284,10 @@ function doScanCapture(){
   for(let r=0;r<3;r++)for(let c=0;c<3;c++){
     const px=Math.round(sx+(c+.5)*cs),py=Math.round(sy+(r+.5)*cs);
     const d=tctx.getImageData(px-5,py-5,11,11);
-    let rr=0,gg=0,bb=0;for(let i=0;i<d.data.length;i+=4){rr+=d.data[i];gg+=d.data[i+1];bb+=d.data[i+2];}
-    const n=d.data.length/4;rgbs.push([Math.round(rr/n),Math.round(gg/n),Math.round(bb/n)]);
+    var pixels=[];for(let i=0;i<d.data.length;i+=4){pixels.push([d.data[i],d.data[i+1],d.data[i+2]]);}
+    if(pixels.length>8){pixels.sort(function(a,b){return(a[0]+a[1]+a[2])-(b[0]+b[1]+b[2]);});var trim=Math.floor(pixels.length*0.2);pixels=pixels.slice(trim,pixels.length-trim);}
+    let rr=0,gg=0,bb=0;pixels.forEach(function(p){rr+=p[0];gg+=p[1];bb+=p[2];});
+    const n=pixels.length;rgbs.push([Math.round(rr/n),Math.round(gg/n),Math.round(bb/n)]);
   }
   rawData[SCAN_SEQ[scanIdx].f]=rgbs;
   if(navigator.vibrate)navigator.vibrate(80);
@@ -2455,10 +2466,47 @@ function doClassifyInner(){
   FO.forEach(f=>{const r=rawData[f];if(!r)return;for(let i=0;i<9;i++)all.push({face:f,pos:i,rgb:r[i],color:null});});
   if(all.length!==54){showError('只有 '+all.length+' 個色塊');return;}
 
-  const anchors={};FO.forEach(f=>{anchors[CC[f]]=rawData[f][4];});
+  const anchors={};FO.forEach(f=>{
+    anchors[CC[f]]=rawData[f][4];
+    // Fix 1: GAN Logo 偵測 — 白色中心被 logo 污染時改用同面低飽和度邊格平均
+    if(CC[f]==='W'){
+      var cp=rawData[f][4],rf=cp[0]/255,gf=cp[1]/255,bf=cp[2]/255;
+      var mx=Math.max(rf,gf,bf),mn=Math.min(rf,gf,bf);
+      var csat=mx>0?(mx-mn)/mx:0;
+      if(csat>0.15){
+        var nts=[];
+        for(var j=0;j<9;j++){if(j===4)continue;var p=rawData[f][j];
+          var pr=p[0]/255,pg=p[1]/255,pb=p[2]/255;
+          var pmx=Math.max(pr,pg,pb),pmn=Math.min(pr,pg,pb);
+          var ps=pmx>0?(pmx-pmn)/pmx:0;
+          if(ps<0.15)nts.push(p);
+        }
+        if(nts.length>=2){
+          anchors.W=[Math.round(nts.reduce(function(s,p){return s+p[0]},0)/nts.length),
+            Math.round(nts.reduce(function(s,p){return s+p[1]},0)/nts.length),
+            Math.round(nts.reduce(function(s,p){return s+p[2]},0)/nts.length)];
+          console.log('GAN Logo fix: W anchor corrected to',anchors.W);
+        }
+      }
+    }
+  });
   all.forEach(s=>{if(s.pos===4)s.color=CC[s.face];});
 
   // HSV conversion
+  // === CIELAB Color Space (industrial-grade color matching) ===
+  function rgb2lab(r,g,b){
+    var r_=r/255,g_=g/255,b_=b/255;
+    r_=r_>0.04045?Math.pow((r_+0.055)/1.055,2.4):r_/12.92;
+    g_=g_>0.04045?Math.pow((g_+0.055)/1.055,2.4):g_/12.92;
+    b_=b_>0.04045?Math.pow((b_+0.055)/1.055,2.4):b_/12.92;
+    var x=(r_*0.4124+g_*0.3576+b_*0.1805)/0.95047;
+    var y=(r_*0.2126+g_*0.7152+b_*0.0722)/1.00000;
+    var z=(r_*0.0193+g_*0.1192+b_*0.9505)/1.08883;
+    x=x>0.008856?Math.pow(x,1/3):(7.787*x)+16/116;
+    y=y>0.008856?Math.pow(y,1/3):(7.787*y)+16/116;
+    z=z>0.008856?Math.pow(z,1/3):(7.787*z)+16/116;
+    return [(116*y)-16, 500*(x-y), 200*(y-z)];
+  }
   function toHSV(r,g,b){
     const rf=r/255,gf=g/255,bf=b/255;
     const mx=Math.max(rf,gf,bf),mn=Math.min(rf,gf,bf),d=mx-mn;
@@ -2473,25 +2521,30 @@ function doClassifyInner(){
     return [h,s,v];
   }
 
-  // Smart distance: HSV-based with R-channel boost for red/orange zone
+  // Delta E distance in LAB space + HSV saturation guard for white/yellow
   function smartDist(r,g,b,ar,ag,ab,c){
-    const [h,s,v]=toHSV(r,g,b);
-    const [ah,as,av]=toHSV(ar,ag,ab);
-    // White: low saturation → distance based on saturation diff
-    if(c==='W') return s*5 + Math.abs(v-av)*2;
-    // Skip white anchor for saturated pixels
-    if(s<0.15) return 10; // saturated pixel shouldn't match unsaturated anchor
-    // Hue distance (circular)
-    let hd=Math.abs(h-ah); hd=Math.min(hd,360-hd);
-    // Red/Orange zone (both hue near 0/360°): use R-channel as primary
-    const inRO=(h>300||h<40)&&(ah>300||ah<40);
-    if(inRO){
-      const rDiff=Math.abs(r-ar)/255;
-      const vDiff=Math.abs(v-av);
-      return rDiff*100 + vDiff*50 + hd*0.5;
+    var [l1,a1,b1]=rgb2lab(r,g,b);
+    var [l2,a2,b2]=rgb2lab(ar,ag,ab);
+    // Base: LAB Delta E with reduced lightness weight (shadow-resistant)
+    var dl=(l1-l2)*0.5;
+    var da=a1-a2;
+    var db=b1-b2;
+    var deltaE=Math.sqrt(dl*dl+da*da+db*db);
+    
+    // White guard: white has very low saturation in HSV
+    // Without this, bright yellow/green get misclassified as white
+    var [h,s,v]=toHSV(r,g,b);
+    if(c==='W'){
+      // Gate 1: 飽和度 (白色 S 實測 0.03~0.12, 黃色 S 實測 0.67~0.98)
+      if(s>0.20) return deltaE + s*100;
+      // Gate 2: LAB b* (白色 b*=1.9~5.9, 黃色 b*=73~88)
+      if(b1>20) return deltaE + b1*2;
+      return deltaE;
     }
-    // Normal: hue distance + value diff
-    return hd + Math.abs(v-av)*30;
+    // Non-white anchor: very low-saturation pixels shouldn't match saturated anchors
+    if(s<0.10 && c!=='W') return deltaE + 40;
+    
+    return deltaE;
   }
 
   const nonC=all.filter(s=>s.pos!==4);
@@ -2653,6 +2706,13 @@ function doClassifyInner(){
   }
   if(cubieFixCount>0) console.log('Cubie uniqueness fixes:', cubieFixCount);
 
+  // Fix 3: 中心塊物理不變性 — 強制校正後重算 faceColors
+  FO.forEach(function(f){
+    var fc4=all.find(function(s){return s.face===f&&s.pos===4;});
+    if(fc4) fc4.color=CC[f];
+    faceColors[f][4]=CC[f];
+  });
+
   // Build facelet
   let fl='';FO.forEach(f=>{faceColors[f].forEach(x=>fl+=C2F[x]||'?');});
   const fcnt={};for(const ch of fl)fcnt[ch]=(fcnt[ch]||0)+1;
@@ -2669,7 +2729,76 @@ function doClassifyInner(){
   showFacePreviews('mgrid');
   document.getElementById('btnRow').innerHTML='<div style="color:rgba(255,255,255,.5);font-size:12px">驗證魔方狀態...</div>';
 
+  // === HUMAN VERIFICATION for low-confidence stickers ===
+  // Check for confused color pairs: R↔O, B↔G, W↔Y (most common scan errors)
+  var confusedPairs=[['R','O'],['B','G'],['W','Y']];
+  var needsHumanCheck=[];
+  nonC.forEach(function(s){
+    if(s.ambiguity>0.35) return; // confident enough
+    var pair=confusedPairs.find(function(p){
+      return (s.color===p[0]&&s.secondColor===p[1])||(s.color===p[1]&&s.secondColor===p[0]);
+    });
+    if(pair){
+      needsHumanCheck.push({
+        face:s.face, pos:s.pos, rgb:s.rgb,
+        color:s.color, secondColor:s.secondColor,
+        ambiguity:s.ambiguity, bestDist:s.bestDist, secondDist:s.secondDist
+      });
+    }
+  });
+  
+  if(needsHumanCheck.length>0){
+    window._pendingHumanCheck=needsHumanCheck;
+    window._humanCheckNonC=nonC;
+    showHumanVerifyUI(needsHumanCheck);
+    return;
+  }
+  
   showModeSelect();
+}
+
+function showHumanVerifyUI(items){
+  var idx=0;
+  function showItem(){
+    if(idx>=items.length){
+      // All verified, continue
+      showModeSelect();
+      return;
+    }
+    var item=items[idx];
+    var faceName={U:'上面',R:'右面',F:'前面',D:'下面',L:'左面',B:'後面'}[item.face]||item.face;
+    var posName=['左上','上','右上','左','中','右','左下','下','右下'][item.pos];
+    var c1=item.color, c2=item.secondColor;
+    var c1Name=CN[c1]||c1, c2Name=CN[c2]||c2;
+    var c1Hex=CMAP[c1]||'#888', c2Hex=CMAP[c2]||'#888';
+    var rgb=item.rgb;
+    var rgbHex='rgb('+rgb[0]+','+rgb[1]+','+rgb[2]+')';
+    
+    var el=document.getElementById('info');
+    el.innerHTML='<div style="font-size:14px;font-weight:900;color:#FFD700;margin-bottom:6px">🔍 顏色確認 ('+(idx+1)+'/'+items.length+')</div>'
+      +'<div style="font-size:12px;color:rgba(255,255,255,.6);margin-bottom:8px">'+faceName+' '+posName+' 的顏色不太確定</div>'
+      +'<div style="display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:10px">'
+      +'<div style="text-align:center"><div style="font-size:9px;color:rgba(255,255,255,.4)">掃描結果</div><div style="width:40px;height:40px;border-radius:8px;background:'+rgbHex+';border:2px solid rgba(255,255,255,.3)"></div></div>'
+      +'<div style="font-size:18px;color:rgba(255,255,255,.3)">→</div>'
+      +'<div style="font-size:13px;color:rgba(255,255,255,.5)">是哪個？</div>'
+      +'</div>';
+
+    var btnRow=document.getElementById('btnRow');
+    btnRow.innerHTML=
+      '<button class="btn" style="background:'+c1Hex+';color:'+(c1==='Y'||c1==='W'?'#000':'#fff')+';font-size:16px;font-weight:900;padding:12px 28px;min-width:100px" onclick="humanPickColor(\''+c1+'\')">'+c1Name+'</button>'
+      +'<button class="btn" style="background:'+c2Hex+';color:'+(c2==='Y'||c2==='W'?'#000':'#fff')+';font-size:16px;font-weight:900;padding:12px 28px;min-width:100px;margin-top:6px" onclick="humanPickColor(\''+c2+'\')">'+c2Name+'</button>';
+      
+    showFacePreviews('mgrid');
+  }
+  
+  window.humanPickColor=function(chosen){
+    var item=items[idx];
+    faceColors[item.face][item.pos]=chosen;
+    idx++;
+    showItem();
+  };
+  
+  showItem();
 }
 window._lbl={};
 window.CN={W:"白",B:"藍",R:"紅",Y:"黃",G:"綠",O:"橘"};
