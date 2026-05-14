@@ -2459,6 +2459,20 @@ function doClassifyInner(){
   all.forEach(s=>{if(s.pos===4)s.color=CC[s.face];});
 
   // HSV conversion
+  // === CIELAB Color Space (industrial-grade color matching) ===
+  function rgb2lab(r,g,b){
+    var r_=r/255,g_=g/255,b_=b/255;
+    r_=r_>0.04045?Math.pow((r_+0.055)/1.055,2.4):r_/12.92;
+    g_=g_>0.04045?Math.pow((g_+0.055)/1.055,2.4):g_/12.92;
+    b_=b_>0.04045?Math.pow((b_+0.055)/1.055,2.4):b_/12.92;
+    var x=(r_*0.4124+g_*0.3576+b_*0.1805)/0.95047;
+    var y=(r_*0.2126+g_*0.7152+b_*0.0722)/1.00000;
+    var z=(r_*0.0193+g_*0.1192+b_*0.9505)/1.08883;
+    x=x>0.008856?Math.pow(x,1/3):(7.787*x)+16/116;
+    y=y>0.008856?Math.pow(y,1/3):(7.787*y)+16/116;
+    z=z>0.008856?Math.pow(z,1/3):(7.787*z)+16/116;
+    return [(116*y)-16, 500*(x-y), 200*(y-z)];
+  }
   function toHSV(r,g,b){
     const rf=r/255,gf=g/255,bf=b/255;
     const mx=Math.max(rf,gf,bf),mn=Math.min(rf,gf,bf),d=mx-mn;
@@ -2473,25 +2487,15 @@ function doClassifyInner(){
     return [h,s,v];
   }
 
-  // Smart distance: HSV-based with R-channel boost for red/orange zone
+  // Delta E distance in LAB space (亮度權重減半 → 對陰影免疫)
   function smartDist(r,g,b,ar,ag,ab,c){
-    const [h,s,v]=toHSV(r,g,b);
-    const [ah,as,av]=toHSV(ar,ag,ab);
-    // White: low saturation → distance based on saturation diff
-    if(c==='W') return s*5 + Math.abs(v-av)*2;
-    // Skip white anchor for saturated pixels
-    if(s<0.15) return 10; // saturated pixel shouldn't match unsaturated anchor
-    // Hue distance (circular)
-    let hd=Math.abs(h-ah); hd=Math.min(hd,360-hd);
-    // Red/Orange zone (both hue near 0/360°): use R-channel as primary
-    const inRO=(h>300||h<40)&&(ah>300||ah<40);
-    if(inRO){
-      const rDiff=Math.abs(r-ar)/255;
-      const vDiff=Math.abs(v-av);
-      return rDiff*100 + vDiff*50 + hd*0.5;
-    }
-    // Normal: hue distance + value diff
-    return hd + Math.abs(v-av)*30;
+    var [l1,a1,b1]=rgb2lab(r,g,b);
+    var [l2,a2,b2]=rgb2lab(ar,ag,ab);
+    // 亮度差減權（陰影只改變亮度，不改變色相）
+    var dl=(l1-l2)*0.4;
+    var da=a1-a2;
+    var db=b1-b2;
+    return Math.sqrt(dl*dl+da*da+db*db);
   }
 
   const nonC=all.filter(s=>s.pos!==4);
