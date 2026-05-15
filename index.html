@@ -2327,6 +2327,25 @@ function cycleColor(face,pos){const colors=['W','R','B','O','G','Y'];const cur=f
 
 // ===== MODE SELECT =====
 
+// ===== startKociemba / startTraining entry points =====
+function startKociemba(){
+  solveMode='kociemba';
+  if(window._kSolution && window._kSolution.trim()){
+    solution=window._kSolution.trim().split(/\s+/);
+    document.getElementById('info').innerHTML='✅ 求解成功！'+solution.length+' 步';
+    showFacePreviews('mgrid');
+    document.getElementById('btnRow').innerHTML='<button class="btn" onclick="beginSolve()">🚀 開始解題 ('+solution.length+' 步)</button>';
+  } else {
+    // Fallback: re-solve
+    var fl='';['U','R','F','D','L','B'].forEach(function(f){faceColors[f].forEach(function(x){fl+=C2F[x]||'?';});});
+    tryAutoRepair(fl,0);
+  }
+}
+function startTraining(){
+  solveMode='cfop';
+  showTrainingMenu();
+}
+
 // ===== 方案 E: Kociemba 橋接器 =====
 function syncFixedStateToCube(validFL){
   const KO=['U','R','F','D','L','B'];const f2c={};KO.forEach(f=>{f2c[f]=faceColors[f][4];});
