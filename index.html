@@ -2435,38 +2435,36 @@ function showModeSelect(){
       if(e.data.t==='ok'){solverReady=true;var bs=document.getElementById('brainStatus');if(bs){bs.innerHTML='🧠 魔方大腦已就緒 ✅';setTimeout(function(){bs.style.opacity='0';},1500);}}
       if(e.data.t==='valid'){
         if(e.data.ok){
-          // ✅ Happy Path: 掃描正確，直接求解，0 差異
+          // ✅ 驗證通過
           window._wasAutoFixed=false;
+          if(fl==='UUUUUUUUURRRRRRRRRFFFFFFFFFDDDDDDDDDLLLLLLLLLBBBBBBBBB'){
+            solverWorker.onmessage=prevCB;
+            document.getElementById('info').innerHTML='<span style="color:#3b5">🎉 魔方已經是完成狀態！</span>';
+            document.getElementById('btnRow').innerHTML='<button class="btn" onclick="location.reload()">🔄 重新開始</button>';
+            return;
+          }
           solverWorker.postMessage({t:'solve',fl:fl});
         } else {
-          // ❌ Recovery Path: 奇偶性錯誤，啟動 Auto-Fix
-          solverWorker.postMessage({t:'autofix',fl:fl});
-        }
-      }
-      if(e.data.t==='autofix'){
-        if(e.data.ok){
-          window._wasAutoFixed=true;
-          window._autoFixSwap=e.data.swap;
-          syncFixedStateToCube(e.data.str);
-          showFacePreviews('mgrid');
-          fl=e.data.str;
-          solverWorker.postMessage({t:'solve',fl:fl});
-        } else {
+          // ❌ 驗證失敗 → 人工修正
           solverWorker.onmessage=prevCB;
-          document.getElementById('info').innerHTML='<span style="color:#E94560">😅 自動修正失敗，請手動檢查色塊。</span>';
+          var errMsg=[];
+          if(e.data.eoP)errMsg.push('邊塊方向');
+          if(e.data.coP)errMsg.push('角塊方向');
+          if(e.data.epP)errMsg.push('邊塊排列');
+          if(e.data.cpP)errMsg.push('角塊排列');
+          document.getElementById('info').innerHTML='<span style="color:#E94560">⚠️ 色塊有誤（'+errMsg.join('、')+'）</span>';
+          document.getElementById('sub').innerHTML='請對照實體魔方修正色塊，點格子切換顏色';
+          _paintIdx=0;_recountPaint();_autoAdvance();
           showEditableFaces();
-          document.getElementById('btnRow').innerHTML='<button class="btn" onclick="showModeSelect()">🔄 重新驗證</button>';
+          document.getElementById('btnRow').innerHTML='<button class="btn" style="background:rgba(0,210,255,.9);padding:10px 24px" onclick="showModeSelect()">🔍 重新驗證</button><button class="btn" style="margin-top:6px;font-size:11px;color:#999;background:none;border:none" onclick="location.reload()">🔄 重新掃描</button>';
+          return;
         }
       }
       if(e.data.t==='sol'){
         solverWorker.onmessage=prevCB;
         window._kSolution=e.data.s;
         window._bridgedState=bridgeToCFOP(e.data.s);
-        var modeLabel='<span style="color:#FFD700">選擇模式</span>';
-        if(window._wasAutoFixed){
-          modeLabel+='<br><span style="font-size:10px;color:rgba(255,165,0,.7)">🔧 已自動校正 1 格（反光誤判），畫面可能與實體魔方微幅不同</span>';
-        }
-        document.getElementById('info').innerHTML=modeLabel;
+        document.getElementById('info').innerHTML='<span style="color:#FFD700">選擇模式</span>';
         document.getElementById('btnRow').innerHTML=
           '<button class="btn" onclick="startKociemba()">🚀 最速解 (~20步)</button>'+
           '<button class="btn" style="margin-top:8px;background:rgba(0,210,255,.9)" onclick="startTraining()">🏆 訓練教練 (CFOP)</button>';
@@ -2481,99 +2479,19 @@ function showModeSelect(){
   doValidate();
 }
 
-function tryAutoRepairThenTraining(fl,attempt){
-  if(attempt>10){document.getElementById('info').innerHTML='<span style="color:#E94560">自動修正失敗</span>';showEditableFaces();document.getElementById('btnRow').innerHTML='<button class="btn" onclick="showModeSelect()">🧩 重新選擇</button>';return;}
-  if(solverWorker)solverWorker.terminate();initSolver();
-  let wc=0;
-  function sendWhenReady(){wc++;if(solverReady)doSend();else if(wc>100)tryAutoRepairThenTraining(fl,attempt);else setTimeout(sendWhenReady,100);}
-  function doSend(){
-    const to=setTimeout(()=>{solverWorker.terminate();solverCB=null;tryAutoRepairThenTraining(fl,attempt+1);},4000);
-    solverCB=(err,sol)=>{clearTimeout(to);if(err){tryAutoRepairThenTraining(fl,attempt+1);return;}
-      document.getElementById('info').textContent='✅ 驗證通過'+(attempt>0?' (修正'+attempt+'次)':'');
-      setTimeout(()=>showTrainingMenu(),200);
-    };
-    solverWorker.postMessage({t:'solve',fl});
-  }
-  sendWhenReady();
-}
-
-function tryAutoRepairThenCFOP(fl,attempt){
-  if(attempt>10){
-    document.getElementById('info').innerHTML='<span style="color:#E94560">自動修正失敗，請手動確認顏色</span>';
-    showEditableFaces();
-    document.getElementById('btnRow').innerHTML='<button class="btn" onclick="showModeSelect()">🧩 重新選擇</button>';
-    return;
-  }
-  if(solverWorker)solverWorker.terminate();
-  initSolver();
-  let wc=0;
-  function sendWhenReady(){
-    wc++;
-    if(solverReady)doSend();
-    else if(wc>100){tryAutoRepairThenCFOP(fl,attempt);}
-    else setTimeout(sendWhenReady,100);
-  }
-  function doSend(){
-    const to=setTimeout(()=>{
-      solverWorker.terminate();solverCB=null;
-      tryAutoRepairThenCFOP(fl,attempt+1);
-    },4000);
-    solverCB=(err,sol)=>{
-      clearTimeout(to);
-      if(err){tryAutoRepairThenCFOP(fl,attempt+1);return;}
-      // Kociemba validated the state — now run CFOP
-      document.getElementById('info').textContent='✅ 色塊驗證通過，CFOP 計算中...'+(attempt>0?' (修正'+attempt+'次)':'');
-      setTimeout(()=>doCFOPSolve(),200);
-    };
-    solverWorker.postMessage({t:'solve',fl});
-  }
-  sendWhenReady();
-}
+function tryAutoRepairThenTraining(fl,attempt){ showModeSelect(); }
+function tryAutoRepairThenCFOP(fl,attempt){ showModeSelect(); }
 
 // ===== AUTO REPAIR (Kociemba) =====
 function tryAutoRepair(fl,attempt){
-  if(attempt>10){
-    document.getElementById('info').innerHTML='<span style="color:#E94560">自動修正失敗，請手動確認顏色</span>';
-    showEditableFaces();
-    document.getElementById('btnRow').innerHTML='<button class="btn" onclick="showModeSelect()">🧩 重新選擇</button>';
-    return;
-  }
-  if(solverWorker)solverWorker.terminate();
-  initSolver();
-  let wc=0;
-  function sendWhenReady(){
-    wc++;
-    if(solverReady)doSend();
-    else if(wc>100){tryAutoRepair(fl,attempt);}
-    else setTimeout(sendWhenReady,100);
-  }
-  function doSend(){
-    const to=setTimeout(()=>{
-      solverWorker.terminate();solverCB=null;
-      document.getElementById('info').textContent='修正嘗試 '+(attempt+1)+'...';
-      // Simple swap of most different sticker
-      tryAutoRepair(fl,attempt+1);
-    },4000);
-    solverCB=(err,sol)=>{
-      clearTimeout(to);
-      if(err){tryAutoRepair(fl,attempt+1);return;}
-      if(!sol||!sol.trim()){document.getElementById('doneOv').classList.add('show');return;}
-      solution=sol.trim().split(/\s+/);
-      document.getElementById('info').innerHTML='✅ 求解成功！'+solution.length+' 步'+(attempt>0?' (修正'+attempt+'次)':'');
-      showFacePreviews('mgrid');
-      document.getElementById('btnRow').innerHTML='<button class="btn" onclick="beginSolve()">🚀 開始解題 ('+solution.length+' 步)</button>';
-    };
-    solverWorker.postMessage({t:'solve',fl});
-  }
-  sendWhenReady();
+  // No autofix — just re-validate and solve directly
+  showModeSelect();
 }
 
 function beginSolve(){
   solveStep=-1;
-  // Happy Path (no autofix): faceColors = physical cube = 0 diffs
-  // Recovery Path (autofixed): _bridgedState = fixed state for correct solve
-  var src=(window._wasAutoFixed&&window._bridgedState)?window._bridgedState:faceColors;
-  ['U','R','F','D','L','B'].forEach(f=>cubeState[f]=[...src[f]]);
+  // Always use faceColors (physical cube) — no autofix means 0 diffs guaranteed
+  ['U','R','F','D','L','B'].forEach(f=>cubeState[f]=[...faceColors[f]]);
   try{if(vid&&vid.srcObject){vid.srcObject.getTracks().forEach(t=>t.stop());vid.srcObject=null;}}catch(e){}
   if(vid)vid.style.display='none';
   document.querySelector('.wrap').style.background='#000';
@@ -3757,7 +3675,7 @@ function doCFOPSolve(){
         seg.moves.forEach(function(mv){solution.push(mv);idx++;});
       });
       // Compute energy per step
-      var _esrc=window._bridgedState||faceColors;var tmpState={};['U','R','F','D','L','B'].forEach(function(f){tmpState[f]=_esrc[f].slice();});
+      var tmpState={};['U','R','F','D','L','B'].forEach(function(f){tmpState[f]=faceColors[f].slice();});
       window._energyAtStep={};window._initialEnergy=_lbl.getEnergyScore?_lbl.getEnergyScore(tmpState):1000;
       for(var si=0;si<solution.length;si++){
         _lbl.dm(tmpState,solution[si]);
@@ -4494,9 +4412,14 @@ function startCFOPGuided(){
       ui.innerHTML='<div style="padding:20px;text-align:center;color:#FFD700;font-size:16px;font-weight:900">🧩 CFOP 計算中...</div>';
       setTimeout(function(){runCFOPGuided(initState);},50);
     }else{
-      // Invalid! Try brute-force auto-fix
-      ui.innerHTML='<div style="padding:20px;text-align:center"><div style="color:#FF6B6B;font-size:16px;font-weight:900;margin-bottom:8px">🔧 偵測到掃描誤差</div><div style="color:rgba(255,255,255,.5);font-size:12px">嘗試自動修正中... (檢查 ~1400 種可能)</div></div>';
-      setTimeout(function(){bruteForceFixInWorker(fl,initState);},50);
+      // Invalid → redirect to manual correction
+      var errMsg=[];
+      if(e.data.eoP)errMsg.push('邊塊方向');
+      if(e.data.coP)errMsg.push('角塊方向');
+      if(e.data.epP)errMsg.push('邊塊排列');
+      if(e.data.cpP)errMsg.push('角塊排列');
+      ui.innerHTML='<div style="padding:20px;text-align:center"><div style="color:#FF6B6B;font-size:16px;font-weight:900;margin-bottom:8px">⚠️ 色塊有誤（'+errMsg.join('、')+'）</div><div style="color:rgba(255,255,255,.5);font-size:12px">請手動修正後重新驗證</div></div>';
+      setTimeout(function(){showModeSelect();},1500);
     }
   };
   solverWorker.addEventListener('message',validateHandler);
@@ -4967,8 +4890,7 @@ function showGuidedPractice(title,desc,moves,initState,steps,stage){
   solveMode='cfop';solution=moves;solveStep=-1;
   window._lblStageMarkers=[];var idx=0;
   steps.forEach(function(st){window._lblStageMarkers.push({idx:idx,stage:stage,explain:st.explain});st.moves.forEach(function(){idx++;});});
-  var _src=(window._bridgedState)?window._bridgedState:faceColors;
-  ['U','R','F','D','L','B'].forEach(function(f){cubeState[f]=[..._src[f]];});
+  ['U','R','F','D','L','B'].forEach(function(f){cubeState[f]=[...faceColors[f]];});
   _restoreSolveUI();
   beginSolve();
 }
