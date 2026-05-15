@@ -4037,6 +4037,12 @@ var levelMgr={
 function showSolveStep(){
   if(solveStep===-1){solveStep++;if(solveStep>0)applyMove(solution[solveStep-1]);}
   if(solveStep>=solution.length){showConfetti();document.getElementById('solveUI').style.display='none';document.getElementById('doneOv').classList.add('show');return;}
+  // Early-complete: if cubeState is already solved, skip remaining steps
+  if(solveStep>0){
+    var _sv={U:'W',R:'B',F:'R',D:'Y',L:'G',B:'O'};var _isSolved=true;
+    ['U','R','F','D','L','B'].forEach(function(f){for(var i=0;i<9;i++)if(cubeState[f][i]!==_sv[f])_isSolved=false;});
+    if(_isSolved){solveStep=solution.length;showConfetti();document.getElementById('solveUI').style.display='none';document.getElementById('doneOv').classList.add('show');return;}
+  }
   // === Level transition check ===
   if(levelMgr.current>0&&levelMgr.current<3){
     var si2=getLBLStageInfo(solveStep);
