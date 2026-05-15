@@ -3659,6 +3659,9 @@ function doCFOPSolve(){
   if(vid)vid.style.display='none';
   document.querySelector('.wrap').style.background='#000';
   if(ov)ov.style.display='none';
+  document.getElementById('topBar').style.display='block';
+  document.getElementById('botBar').style.display='block';
+  var _sui=document.getElementById('solveUI');if(_sui)_sui.style.display='none';
   document.getElementById('info').textContent='🧩 CFOP 計算中...';
   document.getElementById('btnRow').innerHTML='';
   setTimeout(function(){
