@@ -2377,15 +2377,18 @@ function showModeSelect(){
       if(e.data.t==='ok'){solverReady=true;var bs=document.getElementById('brainStatus');if(bs){bs.innerHTML='🧠 魔方大腦已就緒 ✅';setTimeout(function(){bs.style.opacity='0';},1500);}}
       if(e.data.t==='valid'){
         if(e.data.ok){
-          // Valid → solve for bridge, then show buttons
+          // ✅ Happy Path: 掃描正確，直接求解，0 差異
+          window._wasAutoFixed=false;
           solverWorker.postMessage({t:'solve',fl:fl});
         } else {
-          // Invalid → try autofix
+          // ❌ Recovery Path: 奇偶性錯誤，啟動 Auto-Fix
           solverWorker.postMessage({t:'autofix',fl:fl});
         }
       }
       if(e.data.t==='autofix'){
         if(e.data.ok){
+          window._wasAutoFixed=true;
+          window._autoFixSwap=e.data.swap;
           syncFixedStateToCube(e.data.str);
           showFacePreviews('mgrid');
           fl=e.data.str;
@@ -2401,7 +2404,11 @@ function showModeSelect(){
         solverWorker.onmessage=prevCB;
         window._kSolution=e.data.s;
         window._bridgedState=bridgeToCFOP(e.data.s);
-        document.getElementById('info').innerHTML='<span style="color:#FFD700">選擇模式</span>';
+        var modeLabel='<span style="color:#FFD700">選擇模式</span>';
+        if(window._wasAutoFixed){
+          modeLabel+='<br><span style="font-size:10px;color:rgba(255,165,0,.7)">🔧 已自動校正 1 格（反光誤判），畫面可能與實體魔方微幅不同</span>';
+        }
+        document.getElementById('info').innerHTML=modeLabel;
         document.getElementById('btnRow').innerHTML=
           '<button class="btn" onclick="startKociemba()">🚀 最速解 (~20步)</button>'+
           '<button class="btn" style="margin-top:8px;background:rgba(0,210,255,.9)" onclick="startTraining()">🏆 訓練教練 (CFOP)</button>';
@@ -2505,7 +2512,9 @@ function tryAutoRepair(fl,attempt){
 
 function beginSolve(){
   solveStep=-1;
-  var src=window._bridgedState||faceColors;
+  // Happy Path (no autofix): faceColors = physical cube = 0 diffs
+  // Recovery Path (autofixed): _bridgedState = fixed state for correct solve
+  var src=(window._wasAutoFixed&&window._bridgedState)?window._bridgedState:faceColors;
   ['U','R','F','D','L','B'].forEach(f=>cubeState[f]=[...src[f]]);
   try{if(vid&&vid.srcObject){vid.srcObject.getTracks().forEach(t=>t.stop());vid.srcObject=null;}}catch(e){}
   if(vid)vid.style.display='none';
@@ -3797,7 +3806,7 @@ var MOVE_AFFECTED={
 
 // === renderFace6: morandi gray inset shadow for affected cells, X for unaffected ===
 function renderFace6(fc,hl,ox,oy,sz,flipV){
-  var h='';for(var r=0;r<3;r++)for(var c=0;c<3;c++){var idx=r*3+c;var srcIdx=flipV?((2-r)*3+c):idx;var bg=CMAP[fc[srcIdx]]||'#333',x=ox+c*sz,y=oy+r*sz,isH=hl&&hl[srcIdx];
+  var h='';for(var r=0;r<3;r++)for(var c=0;c<3;c++){var idx=r*3+c;var srcIdx=flipV?((2-r)*3+(2-c)):idx;var bg=CMAP[fc[srcIdx]]||'#333',x=ox+c*sz,y=oy+r*sz,isH=hl&&hl[srcIdx];
   h+='<rect x="'+x+'" y="'+y+'" width="'+sz+'" height="'+sz+'" rx="2" fill="'+bg+'" stroke="rgba(0,0,0,.15)" stroke-width="0.5"/>';
   if(isH){h+='<rect x="'+x+'" y="'+y+'" width="'+sz+'" height="3" fill="rgba(0,0,0,.45)"/><rect x="'+x+'" y="'+y+'" width="3" height="'+sz+'" fill="rgba(0,0,0,.45)"/><rect x="'+x+'" y="'+(y+sz-3)+'" width="'+sz+'" height="3" fill="rgba(255,255,255,.35)"/><rect x="'+(x+sz-3)+'" y="'+y+'" width="3" height="'+sz+'" fill="rgba(255,255,255,.35)"/><rect x="'+(x+1)+'" y="'+(y+1)+'" width="'+(sz-2)+'" height="'+(sz-2)+'" rx="1" fill="rgba(0,0,0,.1)"/>';}
   if(hl&&!isH){h+='<line x1="'+(x+3)+'" y1="'+(y+3)+'" x2="'+(x+sz-3)+'" y2="'+(y+sz-3)+'" stroke="rgba(0,0,0,.35)" stroke-width="1"/><line x1="'+(x+sz-3)+'" y1="'+(y+3)+'" x2="'+(x+3)+'" y2="'+(y+sz-3)+'" stroke="rgba(0,0,0,.35)" stroke-width="1"/>';}}
