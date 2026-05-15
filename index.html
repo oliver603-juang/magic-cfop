@@ -22,6 +22,8 @@ canvas#ov{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:conta
 .info{font-size:13px;color:rgba(255,255,255,.7);margin-bottom:8px}
 .mgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;width:78px;margin:0 auto 8px}
 .mcell{aspect-ratio:1;border-radius:3px;border:1px solid rgba(255,255,255,.15)}
+@keyframes flashWarn{0%,100%{box-shadow:0 0 0 2px rgba(255,60,60,.9)}50%{box-shadow:0 0 8px 2px rgba(255,60,60,.3)}}
+.mcell-warn{animation:flashWarn 1s infinite}
 .btn{padding:14px 32px;border:none;border-radius:12px;font-family:'Nunito',sans-serif;font-weight:900;font-size:16px;cursor:pointer;background:#FFD700;color:#000;min-width:120px}
 .btn:active{transform:scale(.96);opacity:.9}
 .btn-sm{padding:10px 20px;font-size:14px}
@@ -2331,31 +2333,37 @@ var _paintNames=['🔴 紅','🔵 藍','🟠 橘','🟢 綠','⬜ 白','🟡 黃
 var _paintIdx=0;
 var _paintCounts={R:0,B:0,O:0,G:0,W:0,Y:0};
 function _recountPaint(){_paintCounts={R:0,B:0,O:0,G:0,W:0,Y:0};['U','R','F','D','L','B'].forEach(f=>{faceColors[f].forEach((c,i)=>{if(i!==4&&c!=='X')_paintCounts[c]=(_paintCounts[c]||0)+1;});});}
-function _autoAdvance(){while(_paintIdx<6&&_paintCounts[_paintSeq[_paintIdx]]>=8)_paintIdx++;_updatePaintUI();}
+function _autoAdvance(){if(document.getElementById('corrColorBar'))return _updatePaintUI();while(_paintIdx<6&&_paintCounts[_paintSeq[_paintIdx]]>=8)_paintIdx++;_updatePaintUI();}
 function _updatePaintUI(){
+  // Update correction color bar if present
+  var corrBar=document.getElementById('corrColorBar');
+  if(corrBar){
+    var spans=corrBar.querySelectorAll('span');
+    spans.forEach(function(s){var pi=parseInt(s.dataset.pi);var pc=_paintSeq[pi];s.textContent=(_paintCounts[pc]||0);s.style.border=pi===_paintIdx?'3px solid #FFD700':'2px solid rgba(255,255,255,.15)';});
+    return;
+  }
   var sub=document.getElementById('sub');
   if(_paintIdx>=6){sub.innerHTML='✅ 48格填完！按下方按鈕繼續';return;}
   var c=_paintSeq[_paintIdx],n=_paintCounts[c]||0;
   sub.innerHTML=_paintNames[_paintIdx]+' <b>'+n+'/8</b>　點格子塗色，再點清除';
-  // color indicator bar
   var bar='';_paintSeq.forEach((pc,pi)=>{var cnt=_paintCounts[pc]||0;var active=pi===_paintIdx;bar+='<span style="display:inline-block;width:28px;height:28px;border-radius:6px;background:'+(CMAP[pc]||'#333')+';margin:2px;border:'+(active?'3px solid #FFD700':'2px solid rgba(255,255,255,.15)')+';text-align:center;line-height:28px;font-size:11px;color:rgba(0,0,0,.6);cursor:pointer" onclick="_paintIdx='+pi+';_updatePaintUI();showEditableFaces()">'+cnt+'</span>';});
   document.getElementById('info').innerHTML=bar;
 }
 function paintCell(f,i){
   if(i===4)return;
   var cur=faceColors[f][i],brush=_paintSeq[_paintIdx];
+  var corrMode=!!document.getElementById('corrColorBar');
   if(cur===brush){
     // Same color = clear
     faceColors[f][i]='X';_paintCounts[brush]--;
   } else if(cur!=='X'){
-    // Overwrite different color: remove old, add new
+    // Overwrite different color: remove old, add new (total unchanged)
     _paintCounts[cur]--;
-    if((_paintCounts[brush]||0)>=8)return;
-    faceColors[f][i]=brush;_paintCounts[brush]++;
+    faceColors[f][i]=brush;_paintCounts[brush]=((_paintCounts[brush])||0)+1;
   } else {
-    // Empty cell: paint
-    if((_paintCounts[brush]||0)>=8)return;
-    faceColors[f][i]=brush;_paintCounts[brush]++;
+    // Empty cell: paint (skip limit in correction mode)
+    if(!corrMode&&(_paintCounts[brush]||0)>=8)return;
+    faceColors[f][i]=brush;_paintCounts[brush]=((_paintCounts[brush])||0)+1;
   }
   _autoAdvance();showEditableFaces();
 }
@@ -2368,7 +2376,11 @@ function showEditableFaces(){
     faceColors[f].forEach((c,i)=>{
       var bg=CM[c]||'#222';
       var border=i===4?'2px solid rgba(255,255,255,.4)':'1px solid rgba(255,255,255,.15)';
-      h+='<div class="mcell" style="width:'+sz+';height:'+sz+';background:'+bg+';cursor:'+(i===4?'default':'pointer')+';border:'+border+';display:flex;align-items:center;justify-content:center;font-size:10px" onclick="'+(i!==4?"paintCell('"+f+"',"+i+")":'')+'">'+(i===4?'⭐':'')+'</div>';
+      // Check low confidence from scan
+      var amb=window._cellAmb&&window._cellAmb[f+'_'+i];
+      var warnCls=(amb&&amb.amb<0.35&&i!==4)?'mcell mcell-warn':'mcell';
+      var tooltip=(amb&&amb.amb<0.35&&i!==4)?'title="信心'+Math.round(amb.amb*100)+'% 可能是'+amb.c2+'"':'';
+      h+='<div class="'+warnCls+'" '+tooltip+' style="width:'+sz+';height:'+sz+';background:'+bg+';cursor:'+(i===4?'default':'pointer')+';border:'+border+';display:flex;align-items:center;justify-content:center;font-size:10px" onclick="'+(i!==4?"paintCell('"+f+"',"+i+")":'')+'">'+(i===4?'⭐':'')+'</div>';
     });
     h+='</div></div>';
     return h;
@@ -2452,9 +2464,17 @@ function showModeSelect(){
           if(e.data.coP)errMsg.push('角塊方向');
           if(e.data.epP)errMsg.push('邊塊排列');
           if(e.data.cpP)errMsg.push('角塊排列');
-          document.getElementById('info').innerHTML='<span style="color:#E94560">⚠️ 色塊有誤（'+errMsg.join('、')+'）</span>';
-          document.getElementById('sub').innerHTML='請對照實體魔方修正色塊，點格子切換顏色';
-          _paintIdx=0;_recountPaint();_autoAdvance();
+          // Show error + color bar together
+          _paintIdx=0;_recountPaint();
+          // Don't autoAdvance — let user pick any color
+          var bar='<div style="margin:4px 0" id="corrColorBar">';
+          _paintSeq.forEach(function(pc,pi){
+            var cnt=_paintCounts[pc]||0;
+            bar+='<span data-pi="'+pi+'" style="display:inline-block;width:28px;height:28px;border-radius:6px;background:'+(CMAP[pc]||'#333')+';margin:2px;border:'+(pi===0?'3px solid #FFD700':'2px solid rgba(255,255,255,.15)')+';text-align:center;line-height:28px;font-size:11px;color:rgba(0,0,0,.6);cursor:pointer" onclick="window._paintIdx='+pi+';document.querySelectorAll(\'#corrColorBar span\').forEach(function(s){s.style.border=parseInt(s.dataset.pi)==='+pi+'?\'3px solid #FFD700\':\'2px solid rgba(255,255,255,.15)\';})">'+cnt+'</span>';
+          });
+          bar+='</div>';
+          document.getElementById('info').innerHTML='<span style="color:#E94560;font-size:13px">⚠️ 色塊有誤（'+errMsg.join('、')+'）</span>'+bar;
+          document.getElementById('sub').innerHTML='選擇顏色 → 點格子塗色，再點同色清除';
           showEditableFaces();
           document.getElementById('btnRow').innerHTML='<button class="btn" style="background:rgba(0,210,255,.9);padding:10px 24px" onclick="showModeSelect()">🔍 重新驗證</button><button class="btn" style="margin-top:6px;font-size:11px;color:#999;background:none;border:none" onclick="location.reload()">🔄 重新掃描</button>';
           return;
@@ -2523,6 +2543,8 @@ function doClassifyInner(){
   cands.sort((a,b)=>a.d-b.d);cands.forEach(({s,c})=>{if(s.color||cnt[c]>=9)return;s.color=c;cnt[c]++;});
   nonC.filter(s=>!s.color).forEach(s=>{var a=Object.entries(cnt).find(([c,n])=>n<9);if(a){s.color=a[0];cnt[a[0]]++;}});
   nonC.forEach(s=>{var sorted=Object.entries(s.dists).sort((a,b)=>a[1]-b[1]);s.bestDist=sorted[0][1];s.secondColor=sorted[1][0];s.secondDist=sorted[1][1];s.ambiguity=s.secondDist>0?(s.secondDist-s.bestDist)/s.secondDist:1;});
+  // Store ambiguity data for correction UI
+  window._cellAmb={};nonC.forEach(s=>{window._cellAmb[s.face+'_'+s.pos]={amb:s.ambiguity,c2:s.secondColor};});
   FO.forEach(f=>{faceColors[f]=all.filter(s=>s.face===f).sort((a,b)=>a.pos-b.pos).map(s=>s.color);});
   var _pc={W:0,R:0,B:0,O:0,G:0,Y:0};all.forEach(s=>{if(s.color)_pc[s.color]=(_pc[s.color]||0)+1;});
   if(!Object.values(_pc).every(v=>v===9)){
