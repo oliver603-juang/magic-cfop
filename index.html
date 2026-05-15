@@ -2538,12 +2538,16 @@ function doClassifyInner(){
   nonC.filter(s=>!s.color).forEach(s=>{var a=Object.entries(cnt).find(([c,n])=>n<9);if(a){s.color=a[0];cnt[a[0]]++;}});
   nonC.forEach(s=>{var sorted=Object.entries(s.dists).sort((a,b)=>a[1]-b[1]);s.bestDist=sorted[0][1];s.secondColor=sorted[1][0];s.secondDist=sorted[1][1];s.ambiguity=s.secondDist>0?(s.secondDist-s.bestDist)/s.secondDist:1;});
   FO.forEach(f=>{faceColors[f]=all.filter(s=>s.face===f).sort((a,b)=>a.pos-b.pos).map(s=>s.color);});
+  var _pc={W:0,R:0,B:0,O:0,G:0,Y:0};all.forEach(s=>{if(s.color)_pc[s.color]=(_pc[s.color]||0)+1;});
+  if(!Object.values(_pc).every(v=>v===9)){
   var ipairs=[['R','O'],['W','Y'],['B','G']];function badEdge(c1,c2){return ipairs.some(([a,b])=>(c1===a&&c2===b)||(c1===b&&c2===a))||c1===c2;}
   var ecs=[['F',1,'R',3],['F',3,'L',5],['F',5,'R',3],['R',5,'B',3],['B',5,'L',3],['L',5,'F',3],['F',2,'R',0],['R',2,'B',0],['B',2,'L',0],['L',2,'F',0],['F',8,'R',6],['R',8,'B',6],['B',8,'L',6],['L',8,'F',6],['U',6,'F',0],['U',7,'F',1],['U',8,'F',2],['U',8,'R',0],['U',5,'R',1],['U',2,'R',2],['U',2,'B',0],['U',1,'B',1],['U',0,'B',2],['U',0,'L',0],['U',3,'L',1],['U',6,'L',2],['D',0,'F',6],['D',1,'F',7],['D',2,'F',8],['D',2,'R',6],['D',5,'R',7],['D',8,'R',8],['D',8,'B',6],['D',7,'B',7],['D',6,'B',8],['D',0,'L',8],['D',3,'L',7],['D',6,'L',6]];
   for(var pass=0;pass<3;pass++){ecs.forEach(([f1,p1,f2,p2])=>{var c1=faceColors[f1][p1],c2=faceColors[f2][p2];if(badEdge(c1,c2)){var s1=nonC.find(s=>s.face===f1&&s.pos===p1),s2=nonC.find(s=>s.face===f2&&s.pos===p2);if(!s1||!s2)return;if(s1.ambiguity<s2.ambiguity){s1.color=s1.secondColor;faceColors[f1][p1]=s1.secondColor;}else{s2.color=s2.secondColor;faceColors[f2][p2]=s2.secondColor;}}});}
   var ecub=[['U',7,'F',1],['U',5,'R',1],['U',1,'B',1],['U',3,'L',1],['D',1,'F',7],['D',5,'R',7],['D',7,'B',7],['D',3,'L',7],['F',5,'R',3],['F',3,'L',5],['B',3,'R',5],['B',5,'L',3]];
   function eKey(i){var[f1,p1,f2,p2]=ecub[i];return[faceColors[f1][p1],faceColors[f2][p2]].sort().join('-');}
   for(var i2=0;i2<ecub.length;i2++)for(var j2=i2+1;j2<ecub.length;j2++){if(eKey(i2)===eKey(j2)){var stks=[];[ecub[i2],ecub[j2]].forEach(ec=>{for(var k=0;k<ec.length;k+=2){var s=nonC.find(x=>x.face===ec[k]&&x.pos===ec[k+1]);if(s)stks.push(s);}});stks.sort((a,b)=>a.ambiguity-b.ambiguity);if(stks.length>0){stks[0].color=stks[0].secondColor;faceColors[stks[0].face][stks[0].pos]=stks[0].secondColor;}}}
+  FO.forEach(f=>{faceColors[f]=all.filter(s=>s.face===f).sort((a,b)=>a.pos-b.pos).map(s=>s.color);});
+  }
   FO.forEach(f=>{faceColors[f][4]=CC[f];});
   var fl='';FO.forEach(f=>{faceColors[f].forEach(x=>fl+=C2F[x]||'?');});
   var fcnt={};for(var ch of fl)fcnt[ch]=(fcnt[ch]||0)+1;
