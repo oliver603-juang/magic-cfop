@@ -2647,8 +2647,8 @@ _lbl.solved=function(){return{U:['W','W','W','W','W','W','W','W','W'],R:['B','B'
 _lbl.clone=function(s){var c={};['U','R','F','D','L','B'].forEach(function(f){c[f]=s[f].slice();});return c;};
 _lbl.rCW=function(s,f){var a=s[f];s[f]=[a[6],a[3],a[0],a[7],a[4],a[1],a[8],a[5],a[2]];};
 _lbl.cyc=function(s,f){var t;switch(f){
-case'U':t=[s.F[0],s.F[1],s.F[2]];s.F[0]=s.R[0];s.F[1]=s.R[1];s.F[2]=s.R[2];s.R[0]=s.B[0];s.R[1]=s.B[1];s.R[2]=s.B[2];s.B[0]=s.L[0];s.B[1]=s.L[1];s.B[2]=s.L[2];s.L[0]=t[0];s.L[1]=t[1];s.L[2]=t[2];break;
-case'D':t=[s.F[6],s.F[7],s.F[8]];s.F[6]=s.L[6];s.F[7]=s.L[7];s.F[8]=s.L[8];s.L[6]=s.B[6];s.L[7]=s.B[7];s.L[8]=s.B[8];s.B[6]=s.R[6];s.B[7]=s.R[7];s.B[8]=s.R[8];s.R[6]=t[0];s.R[7]=t[1];s.R[8]=t[2];break;
+case'U':t=[s.F[0],s.F[1],s.F[2]];s.F[0]=s.L[0];s.F[1]=s.L[1];s.F[2]=s.L[2];s.L[0]=s.B[0];s.L[1]=s.B[1];s.L[2]=s.B[2];s.B[0]=s.R[0];s.B[1]=s.R[1];s.B[2]=s.R[2];s.R[0]=t[0];s.R[1]=t[1];s.R[2]=t[2];break;
+case'D':t=[s.F[6],s.F[7],s.F[8]];s.F[6]=s.R[6];s.F[7]=s.R[7];s.F[8]=s.R[8];s.R[6]=s.B[6];s.R[7]=s.B[7];s.R[8]=s.B[8];s.B[6]=s.L[6];s.B[7]=s.L[7];s.B[8]=s.L[8];s.L[6]=t[0];s.L[7]=t[1];s.L[8]=t[2];break;
 case'R':t=[s.F[2],s.F[5],s.F[8]];s.F[2]=s.D[2];s.F[5]=s.D[5];s.F[8]=s.D[8];s.D[2]=s.B[6];s.D[5]=s.B[3];s.D[8]=s.B[0];s.B[0]=s.U[8];s.B[3]=s.U[5];s.B[6]=s.U[2];s.U[2]=t[0];s.U[5]=t[1];s.U[8]=t[2];break;
 case'L':t=[s.F[0],s.F[3],s.F[6]];s.F[0]=s.U[0];s.F[3]=s.U[3];s.F[6]=s.U[6];s.U[0]=s.B[8];s.U[3]=s.B[5];s.U[6]=s.B[2];s.B[2]=s.D[6];s.B[5]=s.D[3];s.B[8]=s.D[0];s.D[0]=t[0];s.D[3]=t[1];s.D[6]=t[2];break;
 case'F':t=[s.U[6],s.U[7],s.U[8]];s.U[6]=s.L[8];s.U[7]=s.L[5];s.U[8]=s.L[2];s.L[2]=s.D[0];s.L[5]=s.D[1];s.L[8]=s.D[2];s.D[0]=s.R[6];s.D[1]=s.R[3];s.D[2]=s.R[0];s.R[0]=t[0];s.R[3]=t[1];s.R[6]=t[2];break;
@@ -3752,8 +3752,8 @@ function rotateCW(f){var s=cubeState[f];cubeState[f]=[s[6],s[3],s[0],s[7],s[4],s
 function cycle(f){
   var s=cubeState;var t;
   switch(f){
-    case'U':t=[s.F[0],s.F[1],s.F[2]];s.F[0]=s.R[0];s.F[1]=s.R[1];s.F[2]=s.R[2];s.R[0]=s.B[0];s.R[1]=s.B[1];s.R[2]=s.B[2];s.B[0]=s.L[0];s.B[1]=s.L[1];s.B[2]=s.L[2];s.L[0]=t[0];s.L[1]=t[1];s.L[2]=t[2];break;
-    case'D':t=[s.F[6],s.F[7],s.F[8]];s.F[6]=s.L[6];s.F[7]=s.L[7];s.F[8]=s.L[8];s.L[6]=s.B[6];s.L[7]=s.B[7];s.L[8]=s.B[8];s.B[6]=s.R[6];s.B[7]=s.R[7];s.B[8]=s.R[8];s.R[6]=t[0];s.R[7]=t[1];s.R[8]=t[2];break;
+    case'U':t=[s.F[0],s.F[1],s.F[2]];s.F[0]=s.L[0];s.F[1]=s.L[1];s.F[2]=s.L[2];s.L[0]=s.B[0];s.L[1]=s.B[1];s.L[2]=s.B[2];s.B[0]=s.R[0];s.B[1]=s.R[1];s.B[2]=s.R[2];s.R[0]=t[0];s.R[1]=t[1];s.R[2]=t[2];break;
+    case'D':t=[s.F[6],s.F[7],s.F[8]];s.F[6]=s.R[6];s.F[7]=s.R[7];s.F[8]=s.R[8];s.R[6]=s.B[6];s.R[7]=s.B[7];s.R[8]=s.B[8];s.B[6]=s.L[6];s.B[7]=s.L[7];s.B[8]=s.L[8];s.L[6]=t[0];s.L[7]=t[1];s.L[8]=t[2];break;
     case'R':t=[s.F[2],s.F[5],s.F[8]];s.F[2]=s.D[2];s.F[5]=s.D[5];s.F[8]=s.D[8];s.D[2]=s.B[6];s.D[5]=s.B[3];s.D[8]=s.B[0];s.B[0]=s.U[8];s.B[3]=s.U[5];s.B[6]=s.U[2];s.U[2]=t[0];s.U[5]=t[1];s.U[8]=t[2];break;
     case'L':t=[s.F[0],s.F[3],s.F[6]];s.F[0]=s.U[0];s.F[3]=s.U[3];s.F[6]=s.U[6];s.U[0]=s.B[8];s.U[3]=s.B[5];s.U[6]=s.B[2];s.B[2]=s.D[6];s.B[5]=s.D[3];s.B[8]=s.D[0];s.D[0]=t[0];s.D[3]=t[1];s.D[6]=t[2];break;
     case'F':t=[s.U[6],s.U[7],s.U[8]];s.U[6]=s.L[8];s.U[7]=s.L[5];s.U[8]=s.L[2];s.L[2]=s.D[0];s.L[5]=s.D[1];s.L[8]=s.D[2];s.D[0]=s.R[6];s.D[1]=s.R[3];s.D[2]=s.R[0];s.R[0]=t[0];s.R[3]=t[1];s.R[6]=t[2];break;
@@ -4949,5 +4949,5 @@ function showMsg(title,desc,action,btnText){
 // Pre-init solver on page load (background)
 setTimeout(function(){ if(!solverWorker) initSolver(); }, 100);
 </script>
-<div id="versionTag" style="position:fixed;top:4px;right:8px;font-size:10px;color:rgba(255,255,255,.2);z-index:99">v3.5</div>
+<div id="versionTag" style="position:fixed;top:4px;right:8px;font-size:10px;color:rgba(255,255,255,.2);z-index:99">v3.6</div>
 </body></html>
