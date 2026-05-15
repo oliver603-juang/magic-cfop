@@ -63,6 +63,7 @@ canvas#ov{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:n
  <button class="btn btn-sm" style="margin-top:10px;background:rgba(255,255,255,.12);color:#ccc" onclick="startGallery()">🖼️ 從圖庫上傳 6 張照片</button>
  <button class="btn btn-sm" style="margin-top:6px;background:rgba(255,255,255,.08);color:#999;font-size:11px" onclick="startManual()">✏️ 手動輸入顏色</button>
  <input type="file" id="galleryInput" accept="image/*" multiple style="display:none" onchange="handleGalleryFiles(this.files)">
+ <div id="brainStatus" style="margin-top:12px;font-size:11px;color:rgba(255,255,255,.3);transition:opacity .5s">🧠 正在喚醒魔方大腦...</div>
 </div>
 <div class="overlay" id="doneOv">
  <div style="font-size:64px">🎉</div>
@@ -2135,18 +2136,13 @@ MDESC_KID['F']='正面 順時針轉 ↻';MDESC_KID["F'"]='正面 逆時針轉 �
 MDESC_KID['B']='後面 順時針轉 ↻';MDESC_KID["B'"]='後面 逆時針轉 ↺';MDESC_KID['B2']='後面 轉半圈';
 window.CN={W:'白',B:'藍',R:'紅',Y:'黃',G:'綠',O:'橘'};
 
-// ===== SCAN_CONFIG (GAN 魔方最佳化參數) =====
-const SCAN_CONFIG = {
-  logoSatThreshold: 0.15,
-  lWeight: 0.4,
-  whiteSatThreshold: 0.15,
-  whiteSatPenalty: 200,
-  whiteBStarThreshold: 10,
-  whiteBStarPenalty: 8,
-  lowSatThreshold: 0.12,
-  lowSatPenalty: 40,
-  sampleRadius: 0.15,
-  trimRatio: 0.2
+// ===== cube-scan: SCAN_CONFIG =====
+const SCAN_CONFIG={
+  logoSatThreshold:0.15, lWeight:0.4,
+  whiteSatThreshold:0.15, whiteSatPenalty:200,
+  whiteBStarThreshold:10, whiteBStarPenalty:8,
+  lowSatThreshold:0.12, lowSatPenalty:40,
+  sampleRadius:0.15, trimRatio:0.2
 };
 
 let vid,ov,octx;
@@ -2198,7 +2194,7 @@ function initSolver(){
   solverWorker=new Worker(URL.createObjectURL(new Blob([code],{type:'application/javascript'})));
   solverReady=false;
   solverWorker.onmessage=e=>{
-    if(e.data.t==='ok'){solverReady=true;}
+    if(e.data.t==='ok'){solverReady=true;var bs=document.getElementById('brainStatus');if(bs)bs.innerHTML='🧠 魔方大腦已就緒 ✅';if(bs)setTimeout(()=>{bs.style.opacity='0';},1500);}
     if(e.data.t==='sol'&&solverCB)solverCB(null,e.data.s);
     if(e.data.t==='err'&&solverCB)solverCB(new Error(e.data.m));
   };
@@ -2294,8 +2290,8 @@ function doScanCapture(){
   let rgbs=[];
   for(let r=0;r<3;r++)for(let c=0;c<3;c++){
     const px=Math.round(sx+(c+.5)*cs),py=Math.round(sy+(r+.5)*cs);
-    const half=Math.round(cs*SCAN_CONFIG.sampleRadius);const sampleSize=half*2+1;
-    const d=tctx.getImageData(Math.max(0,px-half),Math.max(0,py-half),sampleSize,sampleSize);
+    const half2=Math.round(cs*SCAN_CONFIG.sampleRadius);const ss2=half2*2+1;
+    const d=tctx.getImageData(Math.max(0,px-half2),Math.max(0,py-half2),ss2,ss2);
     var pixels=[];for(let i=0;i<d.data.length;i+=4){pixels.push([d.data[i],d.data[i+1],d.data[i+2]]);}
     if(pixels.length>8){pixels.sort(function(a,b){return(a[0]+a[1]+a[2])-(b[0]+b[1]+b[2]);});var trim=Math.floor(pixels.length*SCAN_CONFIG.trimRatio);pixels=pixels.slice(trim,pixels.length-trim);}
     let rr=0,gg=0,bb=0;pixels.forEach(function(p){rr+=p[0];gg+=p[1];bb+=p[2];});
@@ -2340,10 +2336,37 @@ function showModeSelect(){
   const cnt={};['U','R','F','D','L','B'].forEach(f=>faceColors[f].forEach(c=>{cnt[c]=(cnt[c]||0)+1;}));
   const ok=Object.values(cnt).every(v=>v===9)&&Object.keys(cnt).length===6;
   if(!ok){showError('每個顏色必須剛好 9 個！');return;}
-  document.getElementById('info').innerHTML='<span style="color:#FFD700">選擇模式</span>';
-  document.getElementById('btnRow').innerHTML=
-    '<button class="btn" onclick="startKociemba()">🚀 最速解 (~20步)</button>'+
-    '<button class="btn" style="margin-top:8px;background:rgba(0,210,255,.9)" onclick="startTraining()">🏆 訓練教練 (CFOP)</button>';
+
+  // Stage 10: Worker 奇偶性驗證（防護手動填色錯誤）
+  let fl='';['U','R','F','D','L','B'].forEach(f=>{faceColors[f].forEach(x=>fl+=C2F[x]||'?');});
+  if(!solverWorker)initSolver();
+  document.getElementById('info').innerHTML='<span style="color:rgba(255,255,255,.5)">🧮 數學驗證中...</span>';
+  document.getElementById('btnRow').innerHTML='';
+
+  function doValidate(){
+    if(!solverReady){setTimeout(doValidate,150);return;}
+    var prevCB=solverWorker.onmessage;
+    solverWorker.onmessage=function(e){
+      if(e.data.t==='ok'){solverReady=true;var bs=document.getElementById('brainStatus');if(bs)bs.innerHTML='🧠 魔方大腦已就緒 ✅';if(bs)setTimeout(()=>{bs.style.opacity='0';},1500);}
+      if(e.data.t==='valid'){
+        solverWorker.onmessage=prevCB;
+        if(e.data.ok){
+          document.getElementById('info').innerHTML='<span style="color:#FFD700">選擇模式</span>';
+          document.getElementById('btnRow').innerHTML=
+            '<button class="btn" onclick="startKociemba()">🚀 最速解 (~20步)</button>'+
+            '<button class="btn" style="margin-top:8px;background:rgba(0,210,255,.9)" onclick="startTraining()">🏆 訓練教練 (CFOP)</button>';
+        } else {
+          document.getElementById('info').innerHTML='<span style="color:#E94560">😅 顏色好像填錯囉！<br><span style="font-size:11px;color:rgba(255,255,255,.4)">數學上拼不出合法魔方，請檢查是否有色塊放反。</span></span>';
+          showEditableFaces();
+          document.getElementById('btnRow').innerHTML='<button class="btn" onclick="showModeSelect()">🔄 重新驗證</button>';
+        }
+      }
+      if(e.data.t==='sol'&&solverCB)solverCB(null,e.data.s);
+      if(e.data.t==='err'&&solverCB)solverCB(new Error(e.data.m));
+    };
+    solverWorker.postMessage({t:'validate',fl:fl});
+  }
+  doValidate();
 }
 
 function startKociemba(){
@@ -2478,218 +2501,63 @@ function doClassifyInner(){
   FO.forEach(f=>{const r=rawData[f];if(!r)return;for(let i=0;i<9;i++)all.push({face:f,pos:i,rgb:r[i],color:null});});
   if(all.length!==54){showError('只有 '+all.length+' 個色塊');return;}
 
-  // === Color math utilities ===
-  function rgb2lab(r,g,b){
-    var r_=r/255,g_=g/255,b_=b/255;
-    r_=r_>0.04045?Math.pow((r_+0.055)/1.055,2.4):r_/12.92;
-    g_=g_>0.04045?Math.pow((g_+0.055)/1.055,2.4):g_/12.92;
-    b_=b_>0.04045?Math.pow((b_+0.055)/1.055,2.4):b_/12.92;
-    var x=(r_*0.4124+g_*0.3576+b_*0.1805)/0.95047;
-    var y=(r_*0.2126+g_*0.7152+b_*0.0722)/1.00000;
-    var z=(r_*0.0193+g_*0.1192+b_*0.9505)/1.08883;
-    x=x>0.008856?Math.pow(x,1/3):(7.787*x)+16/116;
-    y=y>0.008856?Math.pow(y,1/3):(7.787*y)+16/116;
-    z=z>0.008856?Math.pow(z,1/3):(7.787*z)+16/116;
-    return [(116*y)-16, 500*(x-y), 200*(y-z)];
-  }
-  function toHSV(r,g,b){
-    const rf=r/255,gf=g/255,bf=b/255;
-    const mx=Math.max(rf,gf,bf),mn=Math.min(rf,gf,bf),d=mx-mn;
-    const v=mx,s=mx>0?d/mx:0;
-    let h=0;
-    if(d>0.001){
-      if(mx===rf)h=60*(((gf-bf)/d)%6);
-      else if(mx===gf)h=60*((bf-rf)/d+2);
-      else h=60*((rf-gf)/d+4);
-      if(h<0)h+=360;
-    }
-    return [h,s,v];
-  }
-  function smartDist(r,g,b,ar,ag,ab,targetColor){
-    var [l1,a1,b1]=rgb2lab(r,g,b);
-    var [l2,a2,b2]=rgb2lab(ar,ag,ab);
-    var dl=(l1-l2)*SCAN_CONFIG.lWeight, da=a1-a2, db=b1-b2;
-    var deltaE=Math.sqrt(dl*dl+da*da+db*db);
-    var [h,s,v]=toHSV(r,g,b);
-    if(targetColor==='W'){
-      if(s>SCAN_CONFIG.whiteSatThreshold) deltaE+=s*SCAN_CONFIG.whiteSatPenalty;
-      if(b1>SCAN_CONFIG.whiteBStarThreshold) deltaE+=b1*SCAN_CONFIG.whiteBStarPenalty;
-      return deltaE;
-    }
-    if(s<SCAN_CONFIG.lowSatThreshold && targetColor!=='W'){
-      return deltaE+SCAN_CONFIG.lowSatPenalty;
-    }
-    return deltaE;
-  }
+  // cube-scan: color math
+  function rgb2lab(r,g,b){var r_=r/255,g_=g/255,b_=b/255;r_=r_>0.04045?Math.pow((r_+0.055)/1.055,2.4):r_/12.92;g_=g_>0.04045?Math.pow((g_+0.055)/1.055,2.4):g_/12.92;b_=b_>0.04045?Math.pow((b_+0.055)/1.055,2.4):b_/12.92;var x=(r_*0.4124+g_*0.3576+b_*0.1805)/0.95047,y=(r_*0.2126+g_*0.7152+b_*0.0722)/1.0,z=(r_*0.0193+g_*0.1192+b_*0.9505)/1.08883;x=x>0.008856?Math.pow(x,1/3):(7.787*x)+16/116;y=y>0.008856?Math.pow(y,1/3):(7.787*y)+16/116;z=z>0.008856?Math.pow(z,1/3):(7.787*z)+16/116;return[(116*y)-16,500*(x-y),200*(y-z)];}
+  function toHSV(r,g,b){var rf=r/255,gf=g/255,bf=b/255,mx=Math.max(rf,gf,bf),mn=Math.min(rf,gf,bf),d=mx-mn,v=mx,s=mx>0?d/mx:0,h=0;if(d>0.001){if(mx===rf)h=60*(((gf-bf)/d)%6);else if(mx===gf)h=60*((bf-rf)/d+2);else h=60*((rf-gf)/d+4);if(h<0)h+=360;}return[h,s,v];}
+  function smartDist(r,g,b,ar,ag,ab,tc){var[l1,a1,b1]=rgb2lab(r,g,b),[l2,a2,b2]=rgb2lab(ar,ag,ab);var dl=(l1-l2)*SCAN_CONFIG.lWeight,da=a1-a2,db=b1-b2,dE=Math.sqrt(dl*dl+da*da+db*db);var[,s]=toHSV(r,g,b);if(tc==='W'){if(s>SCAN_CONFIG.whiteSatThreshold)dE+=s*SCAN_CONFIG.whiteSatPenalty;if(b1>SCAN_CONFIG.whiteBStarThreshold)dE+=b1*SCAN_CONFIG.whiteBStarPenalty;return dE;}if(s<SCAN_CONFIG.lowSatThreshold&&tc!=='W')return dE+SCAN_CONFIG.lowSatPenalty;return dE;}
 
-  // === Stage 2: Dynamic anchors + 3-tier white defense ===
-  const anchors={};
-  const FACES_ORDER=['F','R','B','L','U','D'];
-  const COLORS_ORDER=['R','B','O','G','W','Y'];
-  for(let i=0;i<6;i++){
-    const face=FACES_ORDER[i], color=COLORS_ORDER[i];
-    const centerRGB=rawData[face][4];
-    if(color==='W'){
-      const [ch,cs2,cv]=toHSV(centerRGB[0],centerRGB[1],centerRGB[2]);
+  // cube-scan: Stage 2 — dynamic anchors + 3-tier white defense
+  var anchors={},FA=['F','R','B','L','U','D'],CA=['R','B','O','G','W','Y'];
+  for(var i=0;i<6;i++){var face=FA[i],color=CA[i],cr=rawData[face][4];
+    if(color==='W'){var[,cs2]=toHSV(cr[0],cr[1],cr[2]);
       if(cs2>SCAN_CONFIG.logoSatThreshold){
-        console.warn('⚠️ White center Logo detected (S='+cs2.toFixed(3)+')');
-        // Tier 2: try corners
-        const corners=[rawData[face][0],rawData[face][2],rawData[face][6],rawData[face][8]];
-        const cornerAvg=[
-          Math.round(corners.reduce((s,p)=>s+p[0],0)/4),
-          Math.round(corners.reduce((s,p)=>s+p[1],0)/4),
-          Math.round(corners.reduce((s,p)=>s+p[2],0)/4)
-        ];
-        const [,cs3]=toHSV(cornerAvg[0],cornerAvg[1],cornerAvg[2]);
-        const [,ca3,cb3]=rgb2lab(cornerAvg[0],cornerAvg[1],cornerAvg[2]);
-        if(cs3<0.15 && cb3<15){
-          anchors['W']=cornerAvg;
-          console.log('→ Using corner avg:', cornerAvg);
-        } else {
-          // Tier 3: scan all 54 cells for whitest
-          console.warn('→ Corners also non-white, scanning all cells');
-          let bestWhite=null, bestScore=Infinity;
-          FACES_ORDER.forEach(f=>{
-            rawData[f].forEach((rgb,idx)=>{
-              if(idx===4) return;
-              const [,ss]=toHSV(rgb[0],rgb[1],rgb[2]);
-              const [ll,,bb]=rgb2lab(rgb[0],rgb[1],rgb[2]);
-              const score=ss*100+Math.abs(bb)+(100-ll)*0.5;
-              if(score<bestScore && ss<0.1 && Math.abs(bb)<10 && ll>70){
-                bestScore=score; bestWhite=rgb;
-              }
-            });
-          });
-          anchors['W']=bestWhite||[220,220,220];
-        }
+        var corners=[rawData[face][0],rawData[face][2],rawData[face][6],rawData[face][8]];
+        var ca=[Math.round(corners.reduce((s,p)=>s+p[0],0)/4),Math.round(corners.reduce((s,p)=>s+p[1],0)/4),Math.round(corners.reduce((s,p)=>s+p[2],0)/4)];
+        var[,cs3]=toHSV(ca[0],ca[1],ca[2]);var[,,cb3]=rgb2lab(ca[0],ca[1],ca[2]);
+        if(cs3<0.15&&cb3<15){anchors.W=ca;}
+        else{var bw=null,bs=Infinity;FA.forEach(f=>{rawData[f].forEach((rgb,idx)=>{if(idx===4)return;var[,ss]=toHSV(rgb[0],rgb[1],rgb[2]);var[ll,,bb]=rgb2lab(rgb[0],rgb[1],rgb[2]);var sc=ss*100+Math.abs(bb)+(100-ll)*0.5;if(sc<bs&&ss<0.1&&Math.abs(bb)<10&&ll>70){bs=sc;bw=rgb;}});});anchors.W=bw||[220,220,220];}
         continue;
       }
     }
-    anchors[color]=centerRGB;
+    anchors[color]=cr;
   }
-
-  // Fix centers
   all.forEach(s=>{if(s.pos===4)s.color=CC[s.face];});
 
-  // === Stage 3-4: Distance + Greedy assignment ===
-  const nonC=all.filter(s=>s.pos!==4);
-  nonC.forEach(s=>{
-    s.dists={};
-    Object.entries(anchors).forEach(([c,[ar,ag,ab]])=>{
-      const[r,g,b]=s.rgb;
-      s.dists[c]=smartDist(r,g,b,ar,ag,ab,c);
-    });
-  });
-  const cnt={W:1,R:1,B:1,O:1,G:1,Y:1};
-  const cands=[];
+  // cube-scan: Stage 3-4 — distance + greedy
+  var nonC=all.filter(s=>s.pos!==4);
+  nonC.forEach(s=>{s.dists={};Object.entries(anchors).forEach(([c,[ar,ag,ab]])=>{var[r,g,b]=s.rgb;s.dists[c]=smartDist(r,g,b,ar,ag,ab,c);});});
+  var cnt={W:1,R:1,B:1,O:1,G:1,Y:1},cands=[];
   nonC.forEach(s=>{Object.entries(s.dists).forEach(([c,d])=>{cands.push({s,c,d});});});
   cands.sort((a,b)=>a.d-b.d);
   cands.forEach(({s,c})=>{if(s.color||cnt[c]>=9)return;s.color=c;cnt[c]++;});
-  nonC.filter(s=>!s.color).forEach(s=>{
-    const a=Object.entries(cnt).find(([c,n])=>n<9);
-    if(a){s.color=a[0];cnt[a[0]]++;}
-  });
+  nonC.filter(s=>!s.color).forEach(s=>{var a=Object.entries(cnt).find(([c,n])=>n<9);if(a){s.color=a[0];cnt[a[0]]++;}});
 
-  // === Stage 5: Confidence ===
-  nonC.forEach(s=>{
-    const sorted=Object.entries(s.dists).sort((a,b)=>a[1]-b[1]);
-    s.bestDist=sorted[0][1];
-    s.secondColor=sorted[1][0];
-    s.secondDist=sorted[1][1];
-    s.ambiguity=s.secondDist>0?(s.secondDist-s.bestDist)/s.secondDist:1;
-  });
-
+  // cube-scan: Stage 5 — confidence
+  nonC.forEach(s=>{var sorted=Object.entries(s.dists).sort((a,b)=>a[1]-b[1]);s.bestDist=sorted[0][1];s.secondColor=sorted[1][0];s.secondDist=sorted[1][1];s.ambiguity=s.secondDist>0?(s.secondDist-s.bestDist)/s.secondDist:1;});
   FO.forEach(f=>{faceColors[f]=all.filter(s=>s.face===f).sort((a,b)=>a.pos-b.pos).map(s=>s.color);});
 
-  // === Stage 6: Edge constraints ===
-  const invalidPairs=[['R','O'],['W','Y'],['B','G']];
-  function isInvalidEdge(c1,c2){
-    if(invalidPairs.some(([a,b])=>(c1===a&&c2===b)||(c1===b&&c2===a)))return true;
-    return c1===c2;
-  }
-  const edgeConstraints=[
-    ['F',1,'R',3],['F',3,'L',5],['F',5,'R',3],['R',5,'B',3],['B',5,'L',3],['L',5,'F',3],
-    ['F',2,'R',0],['R',2,'B',0],['B',2,'L',0],['L',2,'F',0],
-    ['F',8,'R',6],['R',8,'B',6],['B',8,'L',6],['L',8,'F',6],
-    ['U',6,'F',0],['U',7,'F',1],['U',8,'F',2],
-    ['U',8,'R',0],['U',5,'R',1],['U',2,'R',2],
-    ['U',2,'B',0],['U',1,'B',1],['U',0,'B',2],
-    ['U',0,'L',0],['U',3,'L',1],['U',6,'L',2],
-    ['D',0,'F',6],['D',1,'F',7],['D',2,'F',8],
-    ['D',2,'R',6],['D',5,'R',7],['D',8,'R',8],
-    ['D',8,'B',6],['D',7,'B',7],['D',6,'B',8],
-    ['D',0,'L',8],['D',3,'L',7],['D',6,'L',6],
-  ];
-  for(let pass=0;pass<3;pass++){
-    edgeConstraints.forEach(([f1,p1,f2,p2])=>{
-      const c1=faceColors[f1][p1],c2=faceColors[f2][p2];
-      if(isInvalidEdge(c1,c2)){
-        const s1=nonC.find(s=>s.face===f1&&s.pos===p1);
-        const s2=nonC.find(s=>s.face===f2&&s.pos===p2);
-        if(!s1||!s2)return;
-        if(s1.ambiguity<s2.ambiguity){
-          s1.color=s1.secondColor;faceColors[f1][p1]=s1.secondColor;
-        }else{
-          s2.color=s2.secondColor;faceColors[f2][p2]=s2.secondColor;
-        }
-      }
-    });
-  }
+  // cube-scan: Stage 6 — edge constraints
+  var ipairs=[['R','O'],['W','Y'],['B','G']];
+  function badEdge(c1,c2){return ipairs.some(([a,b])=>(c1===a&&c2===b)||(c1===b&&c2===a))||c1===c2;}
+  var ecs=[['F',1,'R',3],['F',3,'L',5],['F',5,'R',3],['R',5,'B',3],['B',5,'L',3],['L',5,'F',3],['F',2,'R',0],['R',2,'B',0],['B',2,'L',0],['L',2,'F',0],['F',8,'R',6],['R',8,'B',6],['B',8,'L',6],['L',8,'F',6],['U',6,'F',0],['U',7,'F',1],['U',8,'F',2],['U',8,'R',0],['U',5,'R',1],['U',2,'R',2],['U',2,'B',0],['U',1,'B',1],['U',0,'B',2],['U',0,'L',0],['U',3,'L',1],['U',6,'L',2],['D',0,'F',6],['D',1,'F',7],['D',2,'F',8],['D',2,'R',6],['D',5,'R',7],['D',8,'R',8],['D',8,'B',6],['D',7,'B',7],['D',6,'B',8],['D',0,'L',8],['D',3,'L',7],['D',6,'L',6]];
+  for(var pass=0;pass<3;pass++){ecs.forEach(([f1,p1,f2,p2])=>{var c1=faceColors[f1][p1],c2=faceColors[f2][p2];if(badEdge(c1,c2)){var s1=nonC.find(s=>s.face===f1&&s.pos===p1),s2=nonC.find(s=>s.face===f2&&s.pos===p2);if(!s1||!s2)return;if(s1.ambiguity<s2.ambiguity){s1.color=s1.secondColor;faceColors[f1][p1]=s1.secondColor;}else{s2.color=s2.secondColor;faceColors[f2][p2]=s2.secondColor;}}});}
 
-  // === Stage 7: Cubie uniqueness ===
-  const edgeCubies=[
-    ['U',7,'F',1],['U',5,'R',1],['U',1,'B',1],['U',3,'L',1],
-    ['D',1,'F',7],['D',5,'R',7],['D',7,'B',7],['D',3,'L',7],
-    ['F',5,'R',3],['F',3,'L',5],['B',3,'R',5],['B',5,'L',3],
-  ];
-  function getEdgeKey(i){var[f1,p1,f2,p2]=edgeCubies[i];return[faceColors[f1][p1],faceColors[f2][p2]].sort().join('-');}
-  for(let i=0;i<edgeCubies.length;i++){
-    for(let j=i+1;j<edgeCubies.length;j++){
-      if(getEdgeKey(i)===getEdgeKey(j)){
-        var stks=[];
-        [edgeCubies[i],edgeCubies[j]].forEach(ec=>{for(let k=0;k<ec.length;k+=2){var s=nonC.find(x=>x.face===ec[k]&&x.pos===ec[k+1]);if(s)stks.push(s);}});
-        stks.sort((a,b)=>a.ambiguity-b.ambiguity);
-        if(stks.length>0){stks[0].color=stks[0].secondColor;faceColors[stks[0].face][stks[0].pos]=stks[0].secondColor;}
-      }
-    }
-  }
-
-  // Force center colors
+  // cube-scan: Stage 7 — cubie uniqueness
+  var ecub=[['U',7,'F',1],['U',5,'R',1],['U',1,'B',1],['U',3,'L',1],['D',1,'F',7],['D',5,'R',7],['D',7,'B',7],['D',3,'L',7],['F',5,'R',3],['F',3,'L',5],['B',3,'R',5],['B',5,'L',3]];
+  function eKey(i){var[f1,p1,f2,p2]=ecub[i];return[faceColors[f1][p1],faceColors[f2][p2]].sort().join('-');}
+  for(var i2=0;i2<ecub.length;i2++)for(var j2=i2+1;j2<ecub.length;j2++){if(eKey(i2)===eKey(j2)){var stks=[];[ecub[i2],ecub[j2]].forEach(ec=>{for(var k=0;k<ec.length;k+=2){var s=nonC.find(x=>x.face===ec[k]&&x.pos===ec[k+1]);if(s)stks.push(s);}});stks.sort((a,b)=>a.ambiguity-b.ambiguity);if(stks.length>0){stks[0].color=stks[0].secondColor;faceColors[stks[0].face][stks[0].pos]=stks[0].secondColor;}}}
   FO.forEach(f=>{faceColors[f][4]=CC[f];});
 
-  // === Stage 8: Count check ===
-  let fl='';FO.forEach(f=>{faceColors[f].forEach(x=>fl+=C2F[x]||'?');});
-  const fcnt={};for(const ch of fl)fcnt[ch]=(fcnt[ch]||0)+1;
-  const ok=!fl.includes('?')&&Object.values(fcnt).every(v=>v===9);
-  if(!ok){showError('顏色數量不對: '+JSON.stringify(fcnt));return;}
+  // Stage 8 — count check
+  var fl='';FO.forEach(f=>{faceColors[f].forEach(x=>fl+=C2F[x]||'?');});
+  var fcnt={};for(var ch of fl)fcnt[ch]=(fcnt[ch]||0)+1;
+  if(fl.includes('?')||!Object.values(fcnt).every(v=>v===9)){showError('顏色數量不對: '+JSON.stringify(fcnt));return;}
 
-  // === Stage 9: Human check for confused pairs ===
-  var confusedPairs=[['R','O'],['B','G'],['W','Y']];
-  var needsHumanCheck=[];
-  nonC.forEach(function(s){
-    if(s.ambiguity>0.35) return;
-    var pair=confusedPairs.find(function(p){
-      return (s.color===p[0]&&s.secondColor===p[1])||(s.color===p[1]&&s.secondColor===p[0]);
-    });
-    if(pair){
-      needsHumanCheck.push({
-        face:s.face, pos:s.pos, rgb:s.rgb,
-        color:s.color, secondColor:s.secondColor,
-        ambiguity:s.ambiguity, bestDist:s.bestDist, secondDist:s.secondDist
-      });
-    }
-  });
-
-  const anchorStr=Object.entries(anchors).map(([c,[r,g,b]])=>c+'=('+r+','+g+','+b+')').join(' ');
-  document.getElementById('info').innerHTML='分析完成<br><span style="font-size:9px;color:rgba(255,255,255,.35)">'+anchorStr+'</span>';
+  // Stage 9 — human check
+  var cpairs=[['R','O'],['B','G'],['W','Y']],needsHC=[];
+  nonC.forEach(s=>{if(s.ambiguity>0.35)return;var p=cpairs.find(p=>(s.color===p[0]&&s.secondColor===p[1])||(s.color===p[1]&&s.secondColor===p[0]));if(p)needsHC.push({face:s.face,pos:s.pos,rgb:s.rgb,color:s.color,secondColor:s.secondColor,ambiguity:s.ambiguity,bestDist:s.bestDist,secondDist:s.secondDist});});
   showFacePreviews('mgrid');
-
-  if(needsHumanCheck.length>0){
-    window._pendingHumanCheck=needsHumanCheck;
-    window._humanCheckNonC=nonC;
-    showHumanVerifyUI(needsHumanCheck);
-    return;
-  }
+  if(needsHC.length>0){window._pendingHumanCheck=needsHC;showHumanVerifyUI(needsHC);return;}
   showModeSelect();
 }
 
@@ -5040,6 +4908,9 @@ function showMsg(title,desc,action,btnText){
   h+='</div>';
   ui.innerHTML=h;
 }
+
+// Pre-init solver on page load (background)
+setTimeout(function(){ if(!solverWorker) initSolver(); }, 100);
 </script>
-<div id="versionTag" style="position:fixed;top:4px;right:8px;font-size:10px;color:rgba(255,255,255,.2);z-index:99">v3.3-scan</div>
+<div id="versionTag" style="position:fixed;top:4px;right:8px;font-size:10px;color:rgba(255,255,255,.2);z-index:99">v3.4</div>
 </body></html>
