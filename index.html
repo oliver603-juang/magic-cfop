@@ -2505,7 +2505,8 @@ function tryAutoRepair(fl,attempt){
 
 function beginSolve(){
   solveStep=-1;
-  ['U','R','F','D','L','B'].forEach(f=>cubeState[f]=[...faceColors[f]]);
+  var src=window._bridgedState||faceColors;
+  ['U','R','F','D','L','B'].forEach(f=>cubeState[f]=[...src[f]]);
   try{if(vid&&vid.srcObject){vid.srcObject.getTracks().forEach(t=>t.stop());vid.srcObject=null;}}catch(e){}
   if(vid)vid.style.display='none';
   document.querySelector('.wrap').style.background='#000';
@@ -3689,7 +3690,7 @@ function doCFOPSolve(){
         seg.moves.forEach(function(mv){solution.push(mv);idx++;});
       });
       // Compute energy per step
-      var tmpState={};['U','R','F','D','L','B'].forEach(function(f){tmpState[f]=faceColors[f].slice();});
+      var _esrc=window._bridgedState||faceColors;var tmpState={};['U','R','F','D','L','B'].forEach(function(f){tmpState[f]=_esrc[f].slice();});
       window._energyAtStep={};window._initialEnergy=_lbl.getEnergyScore?_lbl.getEnergyScore(tmpState):1000;
       for(var si=0;si<solution.length;si++){
         _lbl.dm(tmpState,solution[si]);
@@ -4893,7 +4894,8 @@ function showGuidedPractice(title,desc,moves,initState,steps,stage){
   solveMode='cfop';solution=moves;solveStep=-1;
   window._lblStageMarkers=[];var idx=0;
   steps.forEach(function(st){window._lblStageMarkers.push({idx:idx,stage:stage,explain:st.explain});st.moves.forEach(function(){idx++;});});
-  ['U','R','F','D','L','B'].forEach(function(f){cubeState[f]=[...faceColors[f]];});
+  var _src=(window._bridgedState)?window._bridgedState:faceColors;
+  ['U','R','F','D','L','B'].forEach(function(f){cubeState[f]=[..._src[f]];});
   _restoreSolveUI();
   beginSolve();
 }
