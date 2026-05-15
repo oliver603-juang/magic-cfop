@@ -2190,7 +2190,7 @@ function startManual(){
 // ===== SOLVER WORKER (Kociemba) =====
 function initSolver(){
   const lib=document.getElementById('cubejs-src').textContent;
-  const code=lib+`\nconst C=self.Cube||(typeof Cube!=='undefined'?Cube:null);let rdy=false;self.onmessage=function(e){if(e.data.t==='init'){try{C.initSolver();rdy=true;postMessage({t:'ok'})}catch(er){postMessage({t:'err',m:er.message})}}if(e.data.t==='solve'){if(!rdy){C.initSolver();rdy=true}try{const c=C.fromString(e.data.fl);postMessage({t:'sol',s:c.solve()})}catch(er){postMessage({t:'err',m:er.message})}}if(e.data.t==='validate'){if(!rdy){C.initSolver();rdy=true}try{const c=C.fromString(e.data.fl);const j=c.toJSON();const eoP=j.eo.reduce((a,b)=>a+b,0)%2;const coP=j.co.reduce((a,b)=>a+b,0)%3;function pp(arr){let v=new Array(arr.length).fill(false),p=0;for(let i=0;i<arr.length;i++){if(!v[i]){let j2=i,len=0;while(!v[j2]){v[j2]=true;j2=arr[j2];len++;}if(len>1)p+=(len-1);}}return p%2;}const epP=pp(j.ep);const cpP=pp(j.cp);function isVP(a,n){var s=new Set(a);if(s.size!==n)return false;for(var v of a)if(v<0||v>=n)return false;return true;}const ok=isVP(j.ep,12)&&isVP(j.cp,8)&&eoP===0&&coP===0&&epP===cpP;postMessage({t:'valid',ok:ok,eoP:eoP,coP:coP,epP:epP,cpP:cpP})}catch(er){postMessage({t:'valid',ok:false,err:er.message})}}};`;
+  const code=lib+`\nconst C=self.Cube||(typeof Cube!=='undefined'?Cube:null);let rdy=false;self.onmessage=function(e){if(e.data.t==='init'){try{C.initSolver();rdy=true;postMessage({t:'ok'})}catch(er){postMessage({t:'err',m:er.message})}}if(e.data.t==='solve'){if(!rdy){C.initSolver();rdy=true}try{const c=C.fromString(e.data.fl);postMessage({t:'sol',s:c.solve()})}catch(er){postMessage({t:'err',m:er.message})}}if(e.data.t==='validate'){if(!rdy){C.initSolver();rdy=true}try{const c=C.fromString(e.data.fl);const j=c.toJSON();const eoP=j.eo.reduce((a,b)=>a+b,0)%2;const coP=j.co.reduce((a,b)=>a+b,0)%3;function pp(arr){let v=new Array(arr.length).fill(false),p=0;for(let i=0;i<arr.length;i++){if(!v[i]){let j2=i,len=0;while(!v[j2]){v[j2]=true;j2=arr[j2];len++;}if(len>1)p+=(len-1);}}return p%2;}const epP=pp(j.ep);const cpP=pp(j.cp);function isVP(a,n){var s=new Set(a);if(s.size!==n)return false;for(var v of a)if(v<0||v>=n)return false;return true;}const ok=isVP(j.ep,12)&&isVP(j.cp,8)&&eoP===0&&coP===0&&epP===cpP;postMessage({t:'valid',ok:ok,eoP:eoP,coP:coP,epP:epP,cpP:cpP})}catch(er){postMessage({t:'valid',ok:false,err:er.message})if(e.data.t==='autofix'){if(!rdy){C.initSolver();rdy=true}var arr=e.data.fl.split('');for(var i2=0;i2<54;i2++){if(i2%9===4)continue;for(var j3=i2+1;j3<54;j3++){if(j3%9===4)continue;if(arr[i2]===arr[j3])continue;var tmp=arr[i2];arr[i2]=arr[j3];arr[j3]=tmp;var test=arr.join('');var cnt2={};for(var ch2 of test)cnt2[ch2]=(cnt2[ch2]||0)+1;if(!Object.values(cnt2).every(function(v2){return v2===9})){arr[j3]=arr[i2];arr[i2]=tmp;continue;}try{var c2=C.fromString(test);var js2=c2.toJSON();if(!isVP(js2.ep,12)||!isVP(js2.cp,8)){arr[j3]=arr[i2];arr[i2]=tmp;continue;}var eo2=js2.eo.reduce(function(a,b){return a+b},0)%2;var co2=js2.co.reduce(function(a,b){return a+b},0)%3;var ep2=pp(js2.ep);var cp2=pp(js2.cp);if(eo2===0&&co2===0&&ep2===cp2){postMessage({t:'autofix',ok:true,str:test,swap:[i2,j3]});return;}}catch(e3){}arr[j3]=arr[i2];arr[i2]=tmp;}}postMessage({t:'autofix',ok:false});}}};\`;
   solverWorker=new Worker(URL.createObjectURL(new Blob([code],{type:'application/javascript'})));
   solverReady=false;
   solverWorker.onmessage=e=>{
@@ -2332,6 +2332,21 @@ function showEditableFaces(){
 function cycleColor(face,pos){const colors=['W','R','B','O','G','Y'];const cur=faceColors[face][pos];faceColors[face][pos]=colors[(colors.indexOf(cur)+1)%6];showEditableFaces();}
 
 // ===== MODE SELECT =====
+
+// ===== cube-scan: Stage 11 Auto-Fix 狀態同步 =====
+function syncFixedStateToCube(validFaceletStr) {
+  const KOCIEMBA_ORDER = ['U','R','F','D','L','B'];
+  const faceToColor = {};
+  KOCIEMBA_ORDER.forEach(f => { faceToColor[f] = faceColors[f][4]; });
+  let idx = 0;
+  for (const face of KOCIEMBA_ORDER) {
+    for (let i = 0; i < 9; i++) {
+      faceColors[face][i] = faceToColor[validFaceletStr.charAt(idx++)];
+    }
+  }
+  console.log('✅ Auto-Fix 結果已同步回 faceColors');
+}
+
 function showModeSelect(){
   const cnt={};['U','R','F','D','L','B'].forEach(f=>faceColors[f].forEach(c=>{cnt[c]=(cnt[c]||0)+1;}));
   const ok=Object.values(cnt).every(v=>v===9)&&Object.keys(cnt).length===6;
@@ -2356,9 +2371,31 @@ function showModeSelect(){
             '<button class="btn" onclick="startKociemba()">🚀 最速解 (~20步)</button>'+
             '<button class="btn" style="margin-top:8px;background:rgba(0,210,255,.9)" onclick="startTraining()">🏆 訓練教練 (CFOP)</button>';
         } else {
-          document.getElementById('info').innerHTML='<span style="color:#E94560">😅 顏色好像填錯囉！<br><span style="font-size:11px;color:rgba(255,255,255,.4)">數學上拼不出合法魔方，請檢查是否有色塊放反。</span></span>';
-          showEditableFaces();
-          document.getElementById('btnRow').innerHTML='<button class="btn" onclick="showModeSelect()">🔄 重新驗證</button>';
+          // Stage 11: Auto-Fix — 嘗試暴力交換修正
+          document.getElementById('info').innerHTML='<span style="color:rgba(255,255,255,.5)">🔧 自動修正中...</span>';
+          var prevCB2 = solverWorker.onmessage;
+          solverWorker.onmessage = function(e2){
+            if(e2.data.t==='ok'){solverReady=true;}
+            if(e2.data.t==='autofix'){
+              solverWorker.onmessage = prevCB2;
+              if(e2.data.ok){
+                console.log('Auto-Fix: swap ['+e2.data.swap[0]+']↔['+e2.data.swap[1]+']');
+                syncFixedStateToCube(e2.data.str);
+                showFacePreviews('mgrid');
+                document.getElementById('info').innerHTML='<span style="color:#FFD700">選擇模式</span><br><span style="font-size:10px;color:rgba(255,255,255,.3)">🔧 已自動修正 1 格</span>';
+                document.getElementById('btnRow').innerHTML=
+                  '<button class="btn" onclick="startKociemba()">🚀 最速解 (~20步)</button>'+
+                  '<button class="btn" style="margin-top:8px;background:rgba(0,210,255,.9)" onclick="startTraining()">🏆 訓練教練 (CFOP)</button>';
+              } else {
+                document.getElementById('info').innerHTML='<span style="color:#E94560">😅 顏色好像填錯囉！<br><span style="font-size:11px;color:rgba(255,255,255,.4)">自動修正失敗，請手動檢查色塊。</span></span>';
+                showEditableFaces();
+                document.getElementById('btnRow').innerHTML='<button class="btn" onclick="showModeSelect()">🔄 重新驗證</button>';
+              }
+            }
+            if(e2.data.t==='sol'&&solverCB)solverCB(null,e2.data.s);
+            if(e2.data.t==='err'&&solverCB)solverCB(new Error(e2.data.m));
+          };
+          solverWorker.postMessage({t:'autofix',fl:fl});
         }
       }
       if(e.data.t==='sol'&&solverCB)solverCB(null,e.data.s);
@@ -4912,5 +4949,5 @@ function showMsg(title,desc,action,btnText){
 // Pre-init solver on page load (background)
 setTimeout(function(){ if(!solverWorker) initSolver(); }, 100);
 </script>
-<div id="versionTag" style="position:fixed;top:4px;right:8px;font-size:10px;color:rgba(255,255,255,.2);z-index:99">v3.4</div>
+<div id="versionTag" style="position:fixed;top:4px;right:8px;font-size:10px;color:rgba(255,255,255,.2);z-index:99">v3.5</div>
 </body></html>
