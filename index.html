@@ -63,7 +63,7 @@ canvas#ov{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:n
  <button class="btn btn-sm" style="margin-top:10px;background:rgba(255,255,255,.12);color:#ccc" onclick="startGallery()">🖼️ 從圖庫上傳 6 張照片</button>
  <button class="btn btn-sm" style="margin-top:6px;background:rgba(255,255,255,.08);color:#999;font-size:11px" onclick="startManual()">✏️ 手動輸入顏色</button>
  <input type="file" id="galleryInput" accept="image/*" multiple style="display:none" onchange="handleGalleryFiles(this.files)">
- <div id="brainStatus" style="margin-top:12px;font-size:11px;color:rgba(255,255,255,.3);transition:opacity .5s">🧠 正在喚醒魔方大腦...</div>
+ <div id="brainStatus" style="margin-top:12px;font-size:11px;color:rgba(255,255,255,.3)">🧠 正在喚醒魔方大腦...</div>
 </div>
 <div class="overlay" id="doneOv">
  <div style="font-size:64px">🎉</div>
@@ -2137,13 +2137,7 @@ MDESC_KID['B']='後面 順時針轉 ↻';MDESC_KID["B'"]='後面 逆時針轉 �
 window.CN={W:'白',B:'藍',R:'紅',Y:'黃',G:'綠',O:'橘'};
 
 // ===== cube-scan: SCAN_CONFIG =====
-const SCAN_CONFIG={
-  logoSatThreshold:0.15, lWeight:0.4,
-  whiteSatThreshold:0.15, whiteSatPenalty:200,
-  whiteBStarThreshold:10, whiteBStarPenalty:8,
-  lowSatThreshold:0.12, lowSatPenalty:40,
-  sampleRadius:0.15, trimRatio:0.2
-};
+const SCAN_CONFIG={logoSatThreshold:0.15,lWeight:0.4,whiteSatThreshold:0.15,whiteSatPenalty:200,whiteBStarThreshold:10,whiteBStarPenalty:8,lowSatThreshold:0.12,lowSatPenalty:40,sampleRadius:0.15,trimRatio:0.2};
 
 let vid,ov,octx;
 let rawData={},faceColors={},cubeState={};
@@ -2190,11 +2184,11 @@ function startManual(){
 // ===== SOLVER WORKER (Kociemba) =====
 function initSolver(){
   const lib=document.getElementById('cubejs-src').textContent;
-  const code=lib+`\nconst C=self.Cube||(typeof Cube!=='undefined'?Cube:null);let rdy=false;function isVP(a,n){var s=new Set(a);if(s.size!==n)return false;for(var v of a)if(v<0||v>=n)return false;return true;}function pp(arr){let v=new Array(arr.length).fill(false),p=0;for(let i=0;i<arr.length;i++){if(!v[i]){let j2=i,len=0;while(!v[j2]){v[j2]=true;j2=arr[j2];len++;}if(len>1)p+=(len-1);}}return p%2;}self.onmessage=function(e){if(e.data.t==='init'){try{C.initSolver();rdy=true;postMessage({t:'ok'})}catch(er){postMessage({t:'err',m:er.message})}}if(e.data.t==='solve'){if(!rdy){C.initSolver();rdy=true}try{const c=C.fromString(e.data.fl);postMessage({t:'sol',s:c.solve()})}catch(er){postMessage({t:'err',m:er.message})}}if(e.data.t==='validate'){if(!rdy){C.initSolver();rdy=true}try{const c=C.fromString(e.data.fl);const j=c.toJSON();const eoP=j.eo.reduce((a,b)=>a+b,0)%2;const coP=j.co.reduce((a,b)=>a+b,0)%3;const epP=pp(j.ep);const cpP=pp(j.cp);const ok=isVP(j.ep,12)&&isVP(j.cp,8)&&eoP===0&&coP===0&&epP===cpP;postMessage({t:'valid',ok:ok,eoP:eoP,coP:coP,epP:epP,cpP:cpP})}catch(er){postMessage({t:'valid',ok:false,err:er.message})}}if(e.data.t==='autofix'){if(!rdy){C.initSolver();rdy=true}var arr=e.data.fl.split('');for(var i2=0;i2<54;i2++){if(i2%9===4)continue;for(var j3=i2+1;j3<54;j3++){if(j3%9===4)continue;if(arr[i2]===arr[j3])continue;var tmp=arr[i2];arr[i2]=arr[j3];arr[j3]=tmp;var test=arr.join('');var cnt2={};for(var ch2 of test)cnt2[ch2]=(cnt2[ch2]||0)+1;if(!Object.values(cnt2).every(function(v2){return v2===9})){arr[j3]=arr[i2];arr[i2]=tmp;continue;}try{var c2=C.fromString(test);var js2=c2.toJSON();if(!isVP(js2.ep,12)||!isVP(js2.cp,8)){arr[j3]=arr[i2];arr[i2]=tmp;continue;}var eo2=js2.eo.reduce(function(a,b){return a+b},0)%2;var co2=js2.co.reduce(function(a,b){return a+b},0)%3;var ep2=pp(js2.ep);var cp2=pp(js2.cp);if(eo2===0&&co2===0&&ep2===cp2){postMessage({t:'autofix',ok:true,str:test,swap:[i2,j3]});return;}}catch(e3){}arr[j3]=arr[i2];arr[i2]=tmp;}}postMessage({t:'autofix',ok:false})}};`;
+  const code=lib+`\nconst C=self.Cube||(typeof Cube!=='undefined'?Cube:null);let rdy=false;function isVP(a,n){var s=new Set(a);if(s.size!==n)return false;for(var v of a)if(v<0||v>=n)return false;return true;}function pp(arr){let v=new Array(arr.length).fill(false),p=0;for(let i=0;i<arr.length;i++){if(!v[i]){let j2=i,len=0;while(!v[j2]){v[j2]=true;j2=arr[j2];len++;}if(len>1)p+=(len-1);}}return p%2;}self.onmessage=function(e){if(e.data.t==='init'){try{C.initSolver();rdy=true;postMessage({t:'ok'})}catch(er){postMessage({t:'err',m:er.message})}}if(e.data.t==='solve'){if(!rdy){C.initSolver();rdy=true}try{var c=C.fromString(e.data.fl);postMessage({t:'sol',s:c.solve()})}catch(er){postMessage({t:'err',m:er.message})}}if(e.data.t==='validate'){if(!rdy){C.initSolver();rdy=true}try{var c=C.fromString(e.data.fl);var j=c.toJSON();var eoP=j.eo.reduce(function(a,b){return a+b},0)%2;var coP=j.co.reduce(function(a,b){return a+b},0)%3;var epP=pp(j.ep);var cpP=pp(j.cp);var ok=isVP(j.ep,12)&&isVP(j.cp,8)&&eoP===0&&coP===0&&epP===cpP;postMessage({t:'valid',ok:ok,eoP:eoP,coP:coP,epP:epP,cpP:cpP})}catch(er){postMessage({t:'valid',ok:false,err:er.message})}}if(e.data.t==='autofix'){if(!rdy){C.initSolver();rdy=true}var arr=e.data.fl.split('');for(var i2=0;i2<54;i2++){if(i2%9===4)continue;for(var j3=i2+1;j3<54;j3++){if(j3%9===4)continue;if(arr[i2]===arr[j3])continue;var tmp=arr[i2];arr[i2]=arr[j3];arr[j3]=tmp;var test=arr.join('');var cnt2={};for(var ch2 of test)cnt2[ch2]=(cnt2[ch2]||0)+1;if(!Object.values(cnt2).every(function(v2){return v2===9})){arr[j3]=arr[i2];arr[i2]=tmp;continue;}try{var c2=C.fromString(test);var js2=c2.toJSON();if(!isVP(js2.ep,12)||!isVP(js2.cp,8)){arr[j3]=arr[i2];arr[i2]=tmp;continue;}var eo2=js2.eo.reduce(function(a,b){return a+b},0)%2;var co2=js2.co.reduce(function(a,b){return a+b},0)%3;var ep2=pp(js2.ep);var cp2=pp(js2.cp);if(eo2===0&&co2===0&&ep2===cp2){postMessage({t:'autofix',ok:true,str:test,swap:[i2,j3]});return;}}catch(e3){}arr[j3]=arr[i2];arr[i2]=tmp;}}postMessage({t:'autofix',ok:false})}};`;
   solverWorker=new Worker(URL.createObjectURL(new Blob([code],{type:'application/javascript'})));
   solverReady=false;
   solverWorker.onmessage=e=>{
-    if(e.data.t==='ok'){solverReady=true;var bs=document.getElementById('brainStatus');if(bs)bs.innerHTML='🧠 魔方大腦已就緒 ✅';if(bs)setTimeout(()=>{bs.style.opacity='0';},1500);}
+    if(e.data.t==='ok'){solverReady=true;var bs=document.getElementById('brainStatus');if(bs){bs.innerHTML='🧠 魔方大腦已就緒 ✅';setTimeout(function(){bs.style.opacity='0';},1500);}}
     if(e.data.t==='sol'&&solverCB)solverCB(null,e.data.s);
     if(e.data.t==='err'&&solverCB)solverCB(new Error(e.data.m));
   };
@@ -2333,18 +2327,18 @@ function cycleColor(face,pos){const colors=['W','R','B','O','G','Y'];const cur=f
 
 // ===== MODE SELECT =====
 
-// ===== cube-scan: Stage 11 Auto-Fix 狀態同步 =====
-function syncFixedStateToCube(validFaceletStr) {
-  const KOCIEMBA_ORDER = ['U','R','F','D','L','B'];
-  const faceToColor = {};
-  KOCIEMBA_ORDER.forEach(f => { faceToColor[f] = faceColors[f][4]; });
-  let idx = 0;
-  for (const face of KOCIEMBA_ORDER) {
-    for (let i = 0; i < 9; i++) {
-      faceColors[face][i] = faceToColor[validFaceletStr.charAt(idx++)];
-    }
-  }
-  console.log('✅ Auto-Fix 結果已同步回 faceColors');
+// ===== 方案 E: Kociemba 橋接器 =====
+function syncFixedStateToCube(validFL){
+  const KO=['U','R','F','D','L','B'];const f2c={};KO.forEach(f=>{f2c[f]=faceColors[f][4];});
+  let idx=0;for(const face of KO)for(let i=0;i<9;i++)faceColors[face][i]=f2c[validFL.charAt(idx++)];
+}
+
+function bridgeToCFOP(kSolution){
+  if(!kSolution||kSolution.trim()==='')return _lbl.solved();
+  var moves=kSolution.trim().split(/\s+/);var scramble=[];
+  for(var i=moves.length-1;i>=0;i--){var m=moves[i];if(m.includes('2'))scramble.push(m);else if(m.includes("'"))scramble.push(m.replace("'",""));else scramble.push(m+"'");}
+  var vs=_lbl.solved();scramble.forEach(function(m){_lbl.dm(vs,m);});
+  return vs;
 }
 
 function showModeSelect(){
@@ -2352,7 +2346,6 @@ function showModeSelect(){
   const ok=Object.values(cnt).every(v=>v===9)&&Object.keys(cnt).length===6;
   if(!ok){showError('每個顏色必須剛好 9 個！');return;}
 
-  // Stage 10: Worker 奇偶性驗證（防護手動填色錯誤）
   let fl='';['U','R','F','D','L','B'].forEach(f=>{faceColors[f].forEach(x=>fl+=C2F[x]||'?');});
   if(!solverWorker)initSolver();
   document.getElementById('info').innerHTML='<span style="color:rgba(255,255,255,.5)">🧮 數學驗證中...</span>';
@@ -2362,75 +2355,48 @@ function showModeSelect(){
     if(!solverReady){setTimeout(doValidate,150);return;}
     var prevCB=solverWorker.onmessage;
     solverWorker.onmessage=function(e){
-      if(e.data.t==='ok'){solverReady=true;var bs=document.getElementById('brainStatus');if(bs)bs.innerHTML='🧠 魔方大腦已就緒 ✅';if(bs)setTimeout(()=>{bs.style.opacity='0';},1500);}
+      if(e.data.t==='ok'){solverReady=true;var bs=document.getElementById('brainStatus');if(bs){bs.innerHTML='🧠 魔方大腦已就緒 ✅';setTimeout(function(){bs.style.opacity='0';},1500);}}
       if(e.data.t==='valid'){
-        solverWorker.onmessage=prevCB;
         if(e.data.ok){
-          document.getElementById('info').innerHTML='<span style="color:#FFD700">選擇模式</span>';
-          document.getElementById('btnRow').innerHTML=
-            '<button class="btn" onclick="startKociemba()">🚀 最速解 (~20步)</button>'+
-            '<button class="btn" style="margin-top:8px;background:rgba(0,210,255,.9)" onclick="startTraining()">🏆 訓練教練 (CFOP)</button>';
+          // Valid → solve for bridge, then show buttons
+          solverWorker.postMessage({t:'solve',fl:fl});
         } else {
-          // Stage 11: Auto-Fix — 嘗試暴力交換修正
-          document.getElementById('info').innerHTML='<span style="color:rgba(255,255,255,.5)">🔧 自動修正中...</span>';
-          var prevCB2 = solverWorker.onmessage;
-          solverWorker.onmessage = function(e2){
-            if(e2.data.t==='ok'){solverReady=true;}
-            if(e2.data.t==='autofix'){
-              solverWorker.onmessage = prevCB2;
-              if(e2.data.ok){
-                console.log('Auto-Fix: swap ['+e2.data.swap[0]+']↔['+e2.data.swap[1]+']');
-                syncFixedStateToCube(e2.data.str);
-                showFacePreviews('mgrid');
-                document.getElementById('info').innerHTML='<span style="color:#FFD700">選擇模式</span><br><span style="font-size:10px;color:rgba(255,255,255,.3)">🔧 已自動修正 1 格</span>';
-                document.getElementById('btnRow').innerHTML=
-                  '<button class="btn" onclick="startKociemba()">🚀 最速解 (~20步)</button>'+
-                  '<button class="btn" style="margin-top:8px;background:rgba(0,210,255,.9)" onclick="startTraining()">🏆 訓練教練 (CFOP)</button>';
-              } else {
-                document.getElementById('info').innerHTML='<span style="color:#E94560">😅 顏色好像填錯囉！<br><span style="font-size:11px;color:rgba(255,255,255,.4)">自動修正失敗，請手動檢查色塊。</span></span>';
-                showEditableFaces();
-                document.getElementById('btnRow').innerHTML='<button class="btn" onclick="showModeSelect()">🔄 重新驗證</button>';
-              }
-            }
-            if(e2.data.t==='sol'&&solverCB)solverCB(null,e2.data.s);
-            if(e2.data.t==='err'&&solverCB)solverCB(new Error(e2.data.m));
-          };
+          // Invalid → try autofix
           solverWorker.postMessage({t:'autofix',fl:fl});
         }
       }
-      if(e.data.t==='sol'&&solverCB)solverCB(null,e.data.s);
-      if(e.data.t==='err'&&solverCB)solverCB(new Error(e.data.m));
+      if(e.data.t==='autofix'){
+        if(e.data.ok){
+          syncFixedStateToCube(e.data.str);
+          showFacePreviews('mgrid');
+          fl=e.data.str;
+          solverWorker.postMessage({t:'solve',fl:fl});
+        } else {
+          solverWorker.onmessage=prevCB;
+          document.getElementById('info').innerHTML='<span style="color:#E94560">😅 自動修正失敗，請手動檢查色塊。</span>';
+          showEditableFaces();
+          document.getElementById('btnRow').innerHTML='<button class="btn" onclick="showModeSelect()">🔄 重新驗證</button>';
+        }
+      }
+      if(e.data.t==='sol'){
+        solverWorker.onmessage=prevCB;
+        window._kSolution=e.data.s;
+        window._bridgedState=bridgeToCFOP(e.data.s);
+        document.getElementById('info').innerHTML='<span style="color:#FFD700">選擇模式</span>';
+        document.getElementById('btnRow').innerHTML=
+          '<button class="btn" onclick="startKociemba()">🚀 最速解 (~20步)</button>'+
+          '<button class="btn" style="margin-top:8px;background:rgba(0,210,255,.9)" onclick="startTraining()">🏆 訓練教練 (CFOP)</button>';
+      }
+      if(e.data.t==='err'){
+        solverWorker.onmessage=prevCB;
+        document.getElementById('info').innerHTML='<span style="color:#E94560">求解失敗: '+e.data.m+'</span>';
+      }
     };
     solverWorker.postMessage({t:'validate',fl:fl});
   }
   doValidate();
 }
 
-function startKociemba(){
-  solveMode='kociemba';
-  let fl='';['U','R','F','D','L','B'].forEach(f=>{faceColors[f].forEach(x=>fl+=C2F[x]||'?');});
-  document.getElementById('info').textContent='🧮 Kociemba 求解中...';
-  document.getElementById('btnRow').innerHTML='';
-  if(!solverWorker)initSolver();
-  tryAutoRepair(fl,0);
-}
-
-function startCFOP(){
-  solveMode='cfop';
-  let fl='';['U','R','F','D','L','B'].forEach(f=>{faceColors[f].forEach(x=>fl+=C2F[x]||'?');});
-  document.getElementById('info').textContent='🧮 驗證色塊中...';
-  document.getElementById('btnRow').innerHTML='';
-  if(!solverWorker)initSolver();
-  tryAutoRepairThenCFOP(fl,0);
-}
-function startTraining(){
-  solveMode='cfop';
-  let fl='';['U','R','F','D','L','B'].forEach(f=>{faceColors[f].forEach(x=>fl+=C2F[x]||'?');});
-  document.getElementById('info').textContent='🧮 驗證色塊中...';
-  document.getElementById('btnRow').innerHTML='';
-  if(!solverWorker)initSolver();
-  tryAutoRepairThenTraining(fl,0);
-}
 function tryAutoRepairThenTraining(fl,attempt){
   if(attempt>10){document.getElementById('info').innerHTML='<span style="color:#E94560">自動修正失敗</span>';showEditableFaces();document.getElementById('btnRow').innerHTML='<button class="btn" onclick="showModeSelect()">🧩 重新選擇</button>';return;}
   if(solverWorker)solverWorker.terminate();initSolver();
@@ -2533,64 +2499,36 @@ function beginSolve(){
 // ===== CLASSIFY =====
 function doClassify(){try{doClassifyInner();}catch(e){showError('分析錯誤: '+e.message);}}
 function doClassifyInner(){
-  const FO=['U','R','F','D','L','B'];
-  const all=[];
+  const FO=['U','R','F','D','L','B'];const all=[];
   FO.forEach(f=>{const r=rawData[f];if(!r)return;for(let i=0;i<9;i++)all.push({face:f,pos:i,rgb:r[i],color:null});});
   if(all.length!==54){showError('只有 '+all.length+' 個色塊');return;}
-
-  // cube-scan: color math
   function rgb2lab(r,g,b){var r_=r/255,g_=g/255,b_=b/255;r_=r_>0.04045?Math.pow((r_+0.055)/1.055,2.4):r_/12.92;g_=g_>0.04045?Math.pow((g_+0.055)/1.055,2.4):g_/12.92;b_=b_>0.04045?Math.pow((b_+0.055)/1.055,2.4):b_/12.92;var x=(r_*0.4124+g_*0.3576+b_*0.1805)/0.95047,y=(r_*0.2126+g_*0.7152+b_*0.0722)/1.0,z=(r_*0.0193+g_*0.1192+b_*0.9505)/1.08883;x=x>0.008856?Math.pow(x,1/3):(7.787*x)+16/116;y=y>0.008856?Math.pow(y,1/3):(7.787*y)+16/116;z=z>0.008856?Math.pow(z,1/3):(7.787*z)+16/116;return[(116*y)-16,500*(x-y),200*(y-z)];}
   function toHSV(r,g,b){var rf=r/255,gf=g/255,bf=b/255,mx=Math.max(rf,gf,bf),mn=Math.min(rf,gf,bf),d=mx-mn,v=mx,s=mx>0?d/mx:0,h=0;if(d>0.001){if(mx===rf)h=60*(((gf-bf)/d)%6);else if(mx===gf)h=60*((bf-rf)/d+2);else h=60*((rf-gf)/d+4);if(h<0)h+=360;}return[h,s,v];}
   function smartDist(r,g,b,ar,ag,ab,tc){var[l1,a1,b1]=rgb2lab(r,g,b),[l2,a2,b2]=rgb2lab(ar,ag,ab);var dl=(l1-l2)*SCAN_CONFIG.lWeight,da=a1-a2,db=b1-b2,dE=Math.sqrt(dl*dl+da*da+db*db);var[,s]=toHSV(r,g,b);if(tc==='W'){if(s>SCAN_CONFIG.whiteSatThreshold)dE+=s*SCAN_CONFIG.whiteSatPenalty;if(b1>SCAN_CONFIG.whiteBStarThreshold)dE+=b1*SCAN_CONFIG.whiteBStarPenalty;return dE;}if(s<SCAN_CONFIG.lowSatThreshold&&tc!=='W')return dE+SCAN_CONFIG.lowSatPenalty;return dE;}
-
-  // cube-scan: Stage 2 — dynamic anchors + 3-tier white defense
   var anchors={},FA=['F','R','B','L','U','D'],CA=['R','B','O','G','W','Y'];
   for(var i=0;i<6;i++){var face=FA[i],color=CA[i],cr=rawData[face][4];
     if(color==='W'){var[,cs2]=toHSV(cr[0],cr[1],cr[2]);
-      if(cs2>SCAN_CONFIG.logoSatThreshold){
-        var corners=[rawData[face][0],rawData[face][2],rawData[face][6],rawData[face][8]];
-        var ca=[Math.round(corners.reduce((s,p)=>s+p[0],0)/4),Math.round(corners.reduce((s,p)=>s+p[1],0)/4),Math.round(corners.reduce((s,p)=>s+p[2],0)/4)];
-        var[,cs3]=toHSV(ca[0],ca[1],ca[2]);var[,,cb3]=rgb2lab(ca[0],ca[1],ca[2]);
-        if(cs3<0.15&&cb3<15){anchors.W=ca;}
-        else{var bw=null,bs=Infinity;FA.forEach(f=>{rawData[f].forEach((rgb,idx)=>{if(idx===4)return;var[,ss]=toHSV(rgb[0],rgb[1],rgb[2]);var[ll,,bb]=rgb2lab(rgb[0],rgb[1],rgb[2]);var sc=ss*100+Math.abs(bb)+(100-ll)*0.5;if(sc<bs&&ss<0.1&&Math.abs(bb)<10&&ll>70){bs=sc;bw=rgb;}});});anchors.W=bw||[220,220,220];}
-        continue;
-      }
-    }
-    anchors[color]=cr;
-  }
+      if(cs2>SCAN_CONFIG.logoSatThreshold){var corners=[rawData[face][0],rawData[face][2],rawData[face][6],rawData[face][8]];var ca=[Math.round(corners.reduce((s,p)=>s+p[0],0)/4),Math.round(corners.reduce((s,p)=>s+p[1],0)/4),Math.round(corners.reduce((s,p)=>s+p[2],0)/4)];var[,cs3]=toHSV(ca[0],ca[1],ca[2]);var[,,cb3]=rgb2lab(ca[0],ca[1],ca[2]);
+        if(cs3<0.15&&cb3<15){anchors.W=ca;}else{var bw=null,bs=Infinity;FA.forEach(f=>{rawData[f].forEach((rgb,idx)=>{if(idx===4)return;var[,ss]=toHSV(rgb[0],rgb[1],rgb[2]);var[ll,,bb]=rgb2lab(rgb[0],rgb[1],rgb[2]);var sc=ss*100+Math.abs(bb)+(100-ll)*0.5;if(sc<bs&&ss<0.1&&Math.abs(bb)<10&&ll>70){bs=sc;bw=rgb;}});});anchors.W=bw||[220,220,220];}continue;}}anchors[color]=cr;}
   all.forEach(s=>{if(s.pos===4)s.color=CC[s.face];});
-
-  // cube-scan: Stage 3-4 — distance + greedy
   var nonC=all.filter(s=>s.pos!==4);
   nonC.forEach(s=>{s.dists={};Object.entries(anchors).forEach(([c,[ar,ag,ab]])=>{var[r,g,b]=s.rgb;s.dists[c]=smartDist(r,g,b,ar,ag,ab,c);});});
   var cnt={W:1,R:1,B:1,O:1,G:1,Y:1},cands=[];
   nonC.forEach(s=>{Object.entries(s.dists).forEach(([c,d])=>{cands.push({s,c,d});});});
-  cands.sort((a,b)=>a.d-b.d);
-  cands.forEach(({s,c})=>{if(s.color||cnt[c]>=9)return;s.color=c;cnt[c]++;});
+  cands.sort((a,b)=>a.d-b.d);cands.forEach(({s,c})=>{if(s.color||cnt[c]>=9)return;s.color=c;cnt[c]++;});
   nonC.filter(s=>!s.color).forEach(s=>{var a=Object.entries(cnt).find(([c,n])=>n<9);if(a){s.color=a[0];cnt[a[0]]++;}});
-
-  // cube-scan: Stage 5 — confidence
   nonC.forEach(s=>{var sorted=Object.entries(s.dists).sort((a,b)=>a[1]-b[1]);s.bestDist=sorted[0][1];s.secondColor=sorted[1][0];s.secondDist=sorted[1][1];s.ambiguity=s.secondDist>0?(s.secondDist-s.bestDist)/s.secondDist:1;});
   FO.forEach(f=>{faceColors[f]=all.filter(s=>s.face===f).sort((a,b)=>a.pos-b.pos).map(s=>s.color);});
-
-  // cube-scan: Stage 6 — edge constraints
-  var ipairs=[['R','O'],['W','Y'],['B','G']];
-  function badEdge(c1,c2){return ipairs.some(([a,b])=>(c1===a&&c2===b)||(c1===b&&c2===a))||c1===c2;}
+  var ipairs=[['R','O'],['W','Y'],['B','G']];function badEdge(c1,c2){return ipairs.some(([a,b])=>(c1===a&&c2===b)||(c1===b&&c2===a))||c1===c2;}
   var ecs=[['F',1,'R',3],['F',3,'L',5],['F',5,'R',3],['R',5,'B',3],['B',5,'L',3],['L',5,'F',3],['F',2,'R',0],['R',2,'B',0],['B',2,'L',0],['L',2,'F',0],['F',8,'R',6],['R',8,'B',6],['B',8,'L',6],['L',8,'F',6],['U',6,'F',0],['U',7,'F',1],['U',8,'F',2],['U',8,'R',0],['U',5,'R',1],['U',2,'R',2],['U',2,'B',0],['U',1,'B',1],['U',0,'B',2],['U',0,'L',0],['U',3,'L',1],['U',6,'L',2],['D',0,'F',6],['D',1,'F',7],['D',2,'F',8],['D',2,'R',6],['D',5,'R',7],['D',8,'R',8],['D',8,'B',6],['D',7,'B',7],['D',6,'B',8],['D',0,'L',8],['D',3,'L',7],['D',6,'L',6]];
   for(var pass=0;pass<3;pass++){ecs.forEach(([f1,p1,f2,p2])=>{var c1=faceColors[f1][p1],c2=faceColors[f2][p2];if(badEdge(c1,c2)){var s1=nonC.find(s=>s.face===f1&&s.pos===p1),s2=nonC.find(s=>s.face===f2&&s.pos===p2);if(!s1||!s2)return;if(s1.ambiguity<s2.ambiguity){s1.color=s1.secondColor;faceColors[f1][p1]=s1.secondColor;}else{s2.color=s2.secondColor;faceColors[f2][p2]=s2.secondColor;}}});}
-
-  // cube-scan: Stage 7 — cubie uniqueness
   var ecub=[['U',7,'F',1],['U',5,'R',1],['U',1,'B',1],['U',3,'L',1],['D',1,'F',7],['D',5,'R',7],['D',7,'B',7],['D',3,'L',7],['F',5,'R',3],['F',3,'L',5],['B',3,'R',5],['B',5,'L',3]];
   function eKey(i){var[f1,p1,f2,p2]=ecub[i];return[faceColors[f1][p1],faceColors[f2][p2]].sort().join('-');}
   for(var i2=0;i2<ecub.length;i2++)for(var j2=i2+1;j2<ecub.length;j2++){if(eKey(i2)===eKey(j2)){var stks=[];[ecub[i2],ecub[j2]].forEach(ec=>{for(var k=0;k<ec.length;k+=2){var s=nonC.find(x=>x.face===ec[k]&&x.pos===ec[k+1]);if(s)stks.push(s);}});stks.sort((a,b)=>a.ambiguity-b.ambiguity);if(stks.length>0){stks[0].color=stks[0].secondColor;faceColors[stks[0].face][stks[0].pos]=stks[0].secondColor;}}}
   FO.forEach(f=>{faceColors[f][4]=CC[f];});
-
-  // Stage 8 — count check
   var fl='';FO.forEach(f=>{faceColors[f].forEach(x=>fl+=C2F[x]||'?');});
   var fcnt={};for(var ch of fl)fcnt[ch]=(fcnt[ch]||0)+1;
   if(fl.includes('?')||!Object.values(fcnt).every(v=>v===9)){showError('顏色數量不對: '+JSON.stringify(fcnt));return;}
-
-  // Stage 9 — human check
   var cpairs=[['R','O'],['B','G'],['W','Y']],needsHC=[];
   nonC.forEach(s=>{if(s.ambiguity>0.35)return;var p=cpairs.find(p=>(s.color===p[0]&&s.secondColor===p[1])||(s.color===p[1]&&s.secondColor===p[0]));if(p)needsHC.push({face:s.face,pos:s.pos,rgb:s.rgb,color:s.color,secondColor:s.secondColor,ambiguity:s.ambiguity,bestDist:s.bestDist,secondDist:s.secondDist});});
   showFacePreviews('mgrid');
@@ -2647,8 +2585,8 @@ _lbl.solved=function(){return{U:['W','W','W','W','W','W','W','W','W'],R:['B','B'
 _lbl.clone=function(s){var c={};['U','R','F','D','L','B'].forEach(function(f){c[f]=s[f].slice();});return c;};
 _lbl.rCW=function(s,f){var a=s[f];s[f]=[a[6],a[3],a[0],a[7],a[4],a[1],a[8],a[5],a[2]];};
 _lbl.cyc=function(s,f){var t;switch(f){
-case'U':t=[s.F[0],s.F[1],s.F[2]];s.F[0]=s.L[0];s.F[1]=s.L[1];s.F[2]=s.L[2];s.L[0]=s.B[0];s.L[1]=s.B[1];s.L[2]=s.B[2];s.B[0]=s.R[0];s.B[1]=s.R[1];s.B[2]=s.R[2];s.R[0]=t[0];s.R[1]=t[1];s.R[2]=t[2];break;
-case'D':t=[s.F[6],s.F[7],s.F[8]];s.F[6]=s.R[6];s.F[7]=s.R[7];s.F[8]=s.R[8];s.R[6]=s.B[6];s.R[7]=s.B[7];s.R[8]=s.B[8];s.B[6]=s.L[6];s.B[7]=s.L[7];s.B[8]=s.L[8];s.L[6]=t[0];s.L[7]=t[1];s.L[8]=t[2];break;
+case'U':t=[s.F[0],s.F[1],s.F[2]];s.F[0]=s.R[0];s.F[1]=s.R[1];s.F[2]=s.R[2];s.R[0]=s.B[0];s.R[1]=s.B[1];s.R[2]=s.B[2];s.B[0]=s.L[0];s.B[1]=s.L[1];s.B[2]=s.L[2];s.L[0]=t[0];s.L[1]=t[1];s.L[2]=t[2];break;
+case'D':t=[s.F[6],s.F[7],s.F[8]];s.F[6]=s.L[6];s.F[7]=s.L[7];s.F[8]=s.L[8];s.L[6]=s.B[6];s.L[7]=s.B[7];s.L[8]=s.B[8];s.B[6]=s.R[6];s.B[7]=s.R[7];s.B[8]=s.R[8];s.R[6]=t[0];s.R[7]=t[1];s.R[8]=t[2];break;
 case'R':t=[s.F[2],s.F[5],s.F[8]];s.F[2]=s.D[2];s.F[5]=s.D[5];s.F[8]=s.D[8];s.D[2]=s.B[6];s.D[5]=s.B[3];s.D[8]=s.B[0];s.B[0]=s.U[8];s.B[3]=s.U[5];s.B[6]=s.U[2];s.U[2]=t[0];s.U[5]=t[1];s.U[8]=t[2];break;
 case'L':t=[s.F[0],s.F[3],s.F[6]];s.F[0]=s.U[0];s.F[3]=s.U[3];s.F[6]=s.U[6];s.U[0]=s.B[8];s.U[3]=s.B[5];s.U[6]=s.B[2];s.B[2]=s.D[6];s.B[5]=s.D[3];s.B[8]=s.D[0];s.D[0]=t[0];s.D[3]=t[1];s.D[6]=t[2];break;
 case'F':t=[s.U[6],s.U[7],s.U[8]];s.U[6]=s.L[8];s.U[7]=s.L[5];s.U[8]=s.L[2];s.L[2]=s.D[0];s.L[5]=s.D[1];s.L[8]=s.D[2];s.D[0]=s.R[6];s.D[1]=s.R[3];s.D[2]=s.R[0];s.R[0]=t[0];s.R[3]=t[1];s.R[6]=t[2];break;
@@ -3708,7 +3646,7 @@ function doCFOPSolve(){
     try{
       var initState={};
       ['U','R','F','D','L','B'].forEach(function(f){initState[f]=faceColors[f].slice();});
-      var result=_lbl.cfopEngine(initState);
+      var result=_lbl.cfopEngine(window._bridgedState?_lbl.clone(window._bridgedState):initState);
       var solved=_lbl.solved(),ok=true;
       ['U','R','F','D','L','B'].forEach(function(f){for(var i=0;i<9;i++){if(result.state[f][i]!==solved[f][i])ok=false;}});
       if(!ok){
@@ -3752,8 +3690,8 @@ function rotateCW(f){var s=cubeState[f];cubeState[f]=[s[6],s[3],s[0],s[7],s[4],s
 function cycle(f){
   var s=cubeState;var t;
   switch(f){
-    case'U':t=[s.F[0],s.F[1],s.F[2]];s.F[0]=s.L[0];s.F[1]=s.L[1];s.F[2]=s.L[2];s.L[0]=s.B[0];s.L[1]=s.B[1];s.L[2]=s.B[2];s.B[0]=s.R[0];s.B[1]=s.R[1];s.B[2]=s.R[2];s.R[0]=t[0];s.R[1]=t[1];s.R[2]=t[2];break;
-    case'D':t=[s.F[6],s.F[7],s.F[8]];s.F[6]=s.R[6];s.F[7]=s.R[7];s.F[8]=s.R[8];s.R[6]=s.B[6];s.R[7]=s.B[7];s.R[8]=s.B[8];s.B[6]=s.L[6];s.B[7]=s.L[7];s.B[8]=s.L[8];s.L[6]=t[0];s.L[7]=t[1];s.L[8]=t[2];break;
+    case'U':t=[s.F[0],s.F[1],s.F[2]];s.F[0]=s.R[0];s.F[1]=s.R[1];s.F[2]=s.R[2];s.R[0]=s.B[0];s.R[1]=s.B[1];s.R[2]=s.B[2];s.B[0]=s.L[0];s.B[1]=s.L[1];s.B[2]=s.L[2];s.L[0]=t[0];s.L[1]=t[1];s.L[2]=t[2];break;
+    case'D':t=[s.F[6],s.F[7],s.F[8]];s.F[6]=s.L[6];s.F[7]=s.L[7];s.F[8]=s.L[8];s.L[6]=s.B[6];s.L[7]=s.B[7];s.L[8]=s.B[8];s.B[6]=s.R[6];s.B[7]=s.R[7];s.B[8]=s.R[8];s.R[6]=t[0];s.R[7]=t[1];s.R[8]=t[2];break;
     case'R':t=[s.F[2],s.F[5],s.F[8]];s.F[2]=s.D[2];s.F[5]=s.D[5];s.F[8]=s.D[8];s.D[2]=s.B[6];s.D[5]=s.B[3];s.D[8]=s.B[0];s.B[0]=s.U[8];s.B[3]=s.U[5];s.B[6]=s.U[2];s.U[2]=t[0];s.U[5]=t[1];s.U[8]=t[2];break;
     case'L':t=[s.F[0],s.F[3],s.F[6]];s.F[0]=s.U[0];s.F[3]=s.U[3];s.F[6]=s.U[6];s.U[0]=s.B[8];s.U[3]=s.B[5];s.U[6]=s.B[2];s.B[2]=s.D[6];s.B[5]=s.D[3];s.B[8]=s.D[0];s.D[0]=t[0];s.D[3]=t[1];s.D[6]=t[2];break;
     case'F':t=[s.U[6],s.U[7],s.U[8]];s.U[6]=s.L[8];s.U[7]=s.L[5];s.U[8]=s.L[2];s.L[2]=s.D[0];s.L[5]=s.D[1];s.L[8]=s.D[2];s.D[0]=s.R[6];s.D[1]=s.R[3];s.D[2]=s.R[0];s.R[0]=t[0];s.R[3]=t[1];s.R[6]=t[2];break;
@@ -4540,7 +4478,7 @@ function showScanError(){
 
 function runCFOPGuided(initState){
   try{
-    var result=_lbl.cfopEngine(_lbl.clone(initState));
+    var result=_lbl.cfopEngine(window._bridgedState?_lbl.clone(window._bridgedState):_lbl.clone(initState));
     var sv=_lbl.solved(),ok=true;
     ['U','R','F','D','L','B'].forEach(function(f){for(var i=0;i<9;i++){if(result.state[f][i]!==sv[f][i])ok=false;}});
     if(!ok){showScanError();return;}
@@ -4945,9 +4883,7 @@ function showMsg(title,desc,action,btnText){
   h+='</div>';
   ui.innerHTML=h;
 }
-
-// Pre-init solver on page load (background)
-setTimeout(function(){ if(!solverWorker) initSolver(); }, 100);
+setTimeout(function(){if(!solverWorker)initSolver();},100);
 </script>
-<div id="versionTag" style="position:fixed;top:4px;right:8px;font-size:10px;color:rgba(255,255,255,.2);z-index:99">v3.6</div>
+<div id="versionTag" style="position:fixed;top:4px;right:8px;font-size:10px;color:rgba(255,255,255,.2);z-index:99">v3.7</div>
 </body></html>
