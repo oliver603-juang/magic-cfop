@@ -24,8 +24,10 @@ canvas#ov{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:conta
 .mcell{aspect-ratio:1;border-radius:3px;border:1px solid rgba(255,255,255,.15)}
 @keyframes flashWarn{0%,100%{box-shadow:0 0 0 2px rgba(255,60,60,.9)}50%{box-shadow:0 0 8px 2px rgba(255,60,60,.3)}}
 @keyframes flashBad{0%,100%{box-shadow:0 0 0 3px rgba(255,20,20,1);border-color:rgba(255,20,20,1)}50%{box-shadow:0 0 10px 3px rgba(255,20,20,.4);border-color:rgba(255,80,80,.6)}}
+@keyframes flashFix{0%,100%{box-shadow:0 0 0 3px rgba(0,230,64,1);border-color:rgba(0,230,64,1)}50%{box-shadow:0 0 12px 3px rgba(0,230,64,.3);border-color:rgba(0,230,64,.5)}}
 .mcell-warn{animation:flashWarn 1s infinite}
 .mcell-bad{animation:flashBad .8s infinite}
+.mcell-fix{animation:flashFix .8s infinite}
 .btn{padding:14px 32px;border:none;border-radius:12px;font-family:'Nunito',sans-serif;font-weight:900;font-size:16px;cursor:pointer;background:#FFD700;color:#000;min-width:120px}
 .btn:active{transform:scale(.96);opacity:.9}
 .btn-sm{padding:10px 20px;font-size:14px}
@@ -2195,7 +2197,7 @@ function finishManual(){
 // ===== SOLVER WORKER (Kociemba) =====
 function initSolver(){
   const lib=document.getElementById('cubejs-src').textContent;
-  const code=lib+`\nconst C=self.Cube||(typeof Cube!=='undefined'?Cube:null);let rdy=false;function isVP(a,n){var s=new Set(a);if(s.size!==n)return false;for(var v of a)if(v<0||v>=n)return false;return true;}function pp(arr){let v=new Array(arr.length).fill(false),p=0;for(let i=0;i<arr.length;i++){if(!v[i]){let j2=i,len=0;while(!v[j2]){v[j2]=true;j2=arr[j2];len++;}if(len>1)p+=(len-1);}}return p%2;}self.onmessage=function(e){if(e.data.t==='init'){try{C.initSolver();rdy=true;postMessage({t:'ok'})}catch(er){postMessage({t:'err',m:er.message})}}if(e.data.t==='solve'){if(!rdy){C.initSolver();rdy=true}try{var c=C.fromString(e.data.fl);postMessage({t:'sol',s:c.solve()})}catch(er){postMessage({t:'err',m:er.message})}}if(e.data.t==='validate'){if(!rdy){C.initSolver();rdy=true}try{var c=C.fromString(e.data.fl);var j=c.toJSON();var eoP=j.eo.reduce(function(a,b){return a+b},0)%2;var coP=j.co.reduce(function(a,b){return a+b},0)%3;var epP=pp(j.ep);var cpP=pp(j.cp);var ok=isVP(j.ep,12)&&isVP(j.cp,8)&&eoP===0&&coP===0&&epP===cpP;postMessage({t:'valid',ok:ok,eoP:eoP,coP:coP,epP:epP,cpP:cpP})}catch(er){postMessage({t:'valid',ok:false,err:er.message})}}if(e.data.t==='autofix'){if(!rdy){C.initSolver();rdy=true}var arr=e.data.fl.split('');for(var i2=0;i2<54;i2++){if(i2%9===4)continue;for(var j3=i2+1;j3<54;j3++){if(j3%9===4)continue;if(arr[i2]===arr[j3])continue;var tmp=arr[i2];arr[i2]=arr[j3];arr[j3]=tmp;var test=arr.join('');var cnt2={};for(var ch2 of test)cnt2[ch2]=(cnt2[ch2]||0)+1;if(!Object.values(cnt2).every(function(v2){return v2===9})){arr[j3]=arr[i2];arr[i2]=tmp;continue;}try{var c2=C.fromString(test);var js2=c2.toJSON();if(!isVP(js2.ep,12)||!isVP(js2.cp,8)){arr[j3]=arr[i2];arr[i2]=tmp;continue;}var eo2=js2.eo.reduce(function(a,b){return a+b},0)%2;var co2=js2.co.reduce(function(a,b){return a+b},0)%3;var ep2=pp(js2.ep);var cp2=pp(js2.cp);if(eo2===0&&co2===0&&ep2===cp2){postMessage({t:'autofix',ok:true,str:test,swap:[i2,j3]});return;}}catch(e3){}arr[j3]=arr[i2];arr[i2]=tmp;}}postMessage({t:'autofix',ok:false})}};`;
+  const code=lib+`\nconst C=self.Cube||(typeof Cube!=='undefined'?Cube:null);let rdy=false;function isVP(a,n){var s=new Set(a);if(s.size!==n)return false;for(var v of a)if(v<0||v>=n)return false;return true;}function pp(arr){let v=new Array(arr.length).fill(false),p=0;for(let i=0;i<arr.length;i++){if(!v[i]){let j2=i,len=0;while(!v[j2]){v[j2]=true;j2=arr[j2];len++;}if(len>1)p+=(len-1);}}return p%2;}self.onmessage=function(e){if(e.data.t==='init'){try{C.initSolver();rdy=true;postMessage({t:'ok'})}catch(er){postMessage({t:'err',m:er.message})}}if(e.data.t==='solve'){if(!rdy){C.initSolver();rdy=true}try{var c=C.fromString(e.data.fl);postMessage({t:'sol',s:c.solve()})}catch(er){postMessage({t:'err',m:er.message})}}if(e.data.t==='validate'){if(!rdy){C.initSolver();rdy=true}try{var c=C.fromString(e.data.fl);var j=c.toJSON();var eoP=j.eo.reduce(function(a,b){return a+b},0)%2;var coP=j.co.reduce(function(a,b){return a+b},0)%3;var epP=pp(j.ep);var cpP=pp(j.cp);var ok=isVP(j.ep,12)&&isVP(j.cp,8)&&eoP===0&&coP===0&&epP===cpP;postMessage({t:'valid',ok:ok,eoP:eoP,coP:coP,epP:epP,cpP:cpP})}catch(er){postMessage({t:'valid',ok:false,err:er.message})}}if(e.data.t==='autofix'){if(!rdy){C.initSolver();rdy=true}var arr=e.data.fl.split('');for(var i2=0;i2<54;i2++){if(i2%9===4)continue;for(var j3=i2+1;j3<54;j3++){if(j3%9===4)continue;if(arr[i2]===arr[j3])continue;var tmp=arr[i2];arr[i2]=arr[j3];arr[j3]=tmp;var test=arr.join('');var cnt2={};for(var ch2 of test)cnt2[ch2]=(cnt2[ch2]||0)+1;if(!Object.values(cnt2).every(function(v2){return v2===9})){arr[j3]=arr[i2];arr[i2]=tmp;continue;}try{var c2=C.fromString(test);var js2=c2.toJSON();if(!isVP(js2.ep,12)||!isVP(js2.cp,8)){arr[j3]=arr[i2];arr[i2]=tmp;continue;}var eo2=js2.eo.reduce(function(a,b){return a+b},0)%2;var co2=js2.co.reduce(function(a,b){return a+b},0)%3;var ep2=pp(js2.ep);var cp2=pp(js2.cp);if(eo2===0&&co2===0&&ep2===cp2){postMessage({t:'autofix',ok:true,str:test,swap:[i2,j3]});return;}}catch(e3){}arr[j3]=arr[i2];arr[i2]=tmp;}}postMessage({t:'autofix',ok:false})}if(e.data.t==='autofixAll'){if(!rdy){C.initSolver();rdy=true}var arr=e.data.fl.split('');var allSwaps=[];for(var i2=0;i2<54;i2++){if(i2%9===4)continue;for(var j3=i2+1;j3<54;j3++){if(j3%9===4)continue;if(arr[i2]===arr[j3])continue;var tmp=arr[i2];arr[i2]=arr[j3];arr[j3]=tmp;var test=arr.join('');try{var c2=C.fromString(test);var js2=c2.toJSON();if(isVP(js2.ep,12)&&isVP(js2.cp,8)){var eo2=js2.eo.reduce(function(a,b){return a+b},0)%2;var co2=js2.co.reduce(function(a,b){return a+b},0)%3;var ep2=pp(js2.ep);var cp2=pp(js2.cp);if(eo2===0&&co2===0&&ep2===cp2){allSwaps.push([i2,j3]);}}}catch(e3){}arr[j3]=arr[i2];arr[i2]=tmp;}}postMessage({t:'autofixAll',swaps:allSwaps})}};`;
   solverWorker=new Worker(URL.createObjectURL(new Blob([code],{type:'application/javascript'})));
   solverReady=false;
   solverWorker.onmessage=e=>{
@@ -2419,42 +2421,49 @@ function _showManualFixUI(errMsg){
   var badHint=badCount>0?'<div style="font-size:10px;color:#FF6B6B;margin-top:2px">🔴 閃爍紅框 = 不合法（'+badCount+'格）</div>':'';
   document.getElementById('info').innerHTML='<span style="color:#E94560;font-size:13px">⚠️ 色塊有誤（'+errMsg.join('、')+'）</span>'+bar+badHint+'<div style="font-size:10px;color:rgba(255,255,255,.35);margin-top:2px">💡 長按格子看提示</div>';
 }
-// === 自動旋轉修正：角塊接縫偵測（邊塊 2 色易假合法，角塊 3 色才準確）===
-var _CORNER_SEAMS_BY_FACE={
-  B:[[['U',0],['L',0],['B',2]],[['U',2],['B',0],['R',2]],[['D',6],['B',8],['L',6]],[['D',8],['R',8],['B',6]]],
-  D:[[['D',2],['F',8],['R',6]],[['D',0],['L',8],['F',6]],[['D',6],['B',8],['L',6]],[['D',8],['R',8],['B',6]]],
-  L:[[['U',6],['F',0],['L',2]],[['U',0],['L',0],['B',2]],[['D',0],['L',8],['F',6]],[['D',6],['B',8],['L',6]]],
-  R:[[['U',8],['R',0],['F',2]],[['U',2],['B',0],['R',2]],[['D',2],['F',8],['R',6]],[['D',8],['R',8],['B',6]]]
-};
-function _countBadCorners(fc,face){var bad=0;_CORNER_SEAMS_BY_FACE[face].forEach(function(cn){var cs=cn.map(function(p){return fc[p[0]][p[1]];}).sort().join('');if(_VALID_C.indexOf(cs)===-1)bad++;});return bad;}
-function tryAutoFixOrientation(){
-  // Step 1: 角塊接縫偵測 — 逐面檢查，3+壞角嘗試 180° 修正
-  var fc=_cloneFC(faceColors),applied=[];
-  ['B','D','L','R'].forEach(function(face){
-    var badOrig=_countBadCorners(fc,face);
-    if(badOrig>=3){
-      var fcTest=_cloneFC(fc);_rot180(fcTest,face);
-      if(_countBadCorners(fcTest,face)<badOrig){_rot180(fc,face);applied.push(face+'面180°');}
+// === 2D→3D 智能映射轉譯器 (AutoOrientationMapper) ===
+// 解決使用者色塊正確但 epP 錯誤的「3D→2D 視角翻轉」問題
+// 原理：不改變使用者填的顏色，自動修正看魔方時的視角旋轉誤差
+var AutoOrientationMapper={
+  strategies:[
+    {name:'原始',fix:function(fc){return _cloneFC(fc);}},
+    {name:'B面180°',fix:function(fc){var c=_cloneFC(fc);_rot180(c,'B');return c;}},
+    {name:'D面180°',fix:function(fc){var c=_cloneFC(fc);_rot180(c,'D');return c;}},
+    {name:'B+D面180°',fix:function(fc){var c=_cloneFC(fc);_rot180(c,'B');_rot180(c,'D');return c;}},
+    {name:'L面CCW90°',fix:function(fc){var c=_cloneFC(fc);_rotCCW(c,'L');return c;}},
+    {name:'R面CW90°',fix:function(fc){var c=_cloneFC(fc);_rotCW(c,'R');return c;}},
+    {name:'B面180°+L面CCW90°',fix:function(fc){var c=_cloneFC(fc);_rot180(c,'B');_rotCCW(c,'L');return c;}},
+    {name:'B面180°+R面CW90°',fix:function(fc){var c=_cloneFC(fc);_rot180(c,'B');_rotCW(c,'R');return c;}}
+  ],
+  // 找出最佳映射：先試純旋轉，再試旋轉+swap
+  findBestMapping:function(fc,validateFn,swapFixFn,callback){
+    var self=this;var bestRotation=null;var bestBadCount=999;
+    // Phase 1: 純旋轉直接通過？
+    for(var i=0;i<self.strategies.length;i++){
+      var s=self.strategies[i];
+      var mapped=s.fix(fc);
+      var fl='';['U','R','F','D','L','B'].forEach(function(f){mapped[f].forEach(function(x){fl+=C2F[x]||'?';});});
+      if(validateFn(fl)){
+        callback({type:'perfect',strategy:s.name,fc:mapped,fl:fl});return;
+      }
+      var badCount=Object.keys(findBadCellsFor(mapped)).length;
+      if(badCount<bestBadCount){bestBadCount=badCount;bestRotation={strategy:s.name,fc:mapped,fl:fl,badCount:badCount};}
     }
-  });
-  var bad=findBadCellsFor(fc);
-  if(Object.keys(bad).length===0) return{fixed:true,label:applied.join(' + '),fc:fc,applied:applied};
-  // Step 1b: 嘗試更多單面旋轉組合
-  var trials=[
-    {ops:[['B','180']],label:'B面180°'},{ops:[['D','180']],label:'D面180°'},
-    {ops:[['B','180'],['D','180']],label:'B+D面各180°'},
-    {ops:[['L','CW']],label:'L面90°CW'},{ops:[['L','CCW']],label:'L面90°CCW'},
-    {ops:[['R','CW']],label:'R面90°CW'},{ops:[['R','CCW']],label:'R面90°CCW'},
-  ];
-  for(var t=0;t<trials.length;t++){
-    var fc2=_cloneFC(faceColors);
-    trials[t].ops.forEach(function(op){if(op[1]==='180')_rot180(fc2,op[0]);else if(op[1]==='CW')_rotCW(fc2,op[0]);else _rotCCW(fc2,op[0]);});
-    if(Object.keys(findBadCellsFor(fc2)).length===0) return{fixed:true,label:trials[t].label,fc:fc2,applied:[trials[t].label]};
+    // Phase 2: 壞積木=0 的旋轉 + Worker autofix swap
+    if(bestRotation&&bestRotation.badCount===0){
+      swapFixFn(bestRotation.fl,function(swapResult){
+        if(swapResult){
+          callback({type:'rotation+swap',strategy:bestRotation.strategy,fc:bestRotation.fc,swap:swapResult});
+        } else {
+          callback({type:'rotation_only',strategy:bestRotation.strategy,fc:bestRotation.fc,badCount:0});
+        }
+      });
+      return;
+    }
+    // Phase 3: 無法修復
+    callback({type:'failed',bestStrategy:bestRotation?bestRotation.strategy:null,badCount:bestBadCount});
   }
-  // 回傳接縫修正的結果（即使不完美）
-  if(applied.length>0) return{fixed:false,label:applied.join(' + '),fc:fc,applied:applied,remaining:Object.keys(bad).length};
-  return null;
-}
+};
 function showEditableFaces(){
   const el=document.getElementById('mgrid');el.style.display='block';el.innerHTML='';
   const CM=CMAP;CM['X']='#222';
@@ -2465,9 +2474,10 @@ function showEditableFaces(){
       var bg=CM[c]||'#222';
       var border=i===4?'2px solid rgba(255,255,255,.4)':'1px solid rgba(255,255,255,.15)';
       var badInfo=window._badCells&&window._badCells[f+'_'+i];
+      var fixInfo=window._fixCells&&window._fixCells[f+'_'+i];
       var amb=window._cellAmb&&window._cellAmb[f+'_'+i];
-      var warnCls=badInfo?'mcell mcell-bad':((amb&&amb.amb<0.35&&i!==4)?'mcell mcell-warn':'mcell');
-      var tooltip=badInfo?'title="⚠️ '+badInfo+'"':((amb&&amb.amb<0.35&&i!==4)?'title="信心'+Math.round(amb.amb*100)+'% 可能是'+amb.c2+'"':'');
+      var warnCls=fixInfo?'mcell mcell-fix':(badInfo?'mcell mcell-bad':((amb&&amb.amb<0.35&&i!==4)?'mcell mcell-warn':'mcell'));
+      var tooltip=fixInfo?'title="🔧 '+fixInfo+'"':(badInfo?'title="⚠️ '+badInfo+'"':((amb&&amb.amb<0.35&&i!==4)?'title="信心'+Math.round(amb.amb*100)+'% 可能是'+amb.c2+'"':''));
       h+='<div class="'+warnCls+'" '+tooltip+' style="width:'+sz+';height:'+sz+';background:'+bg+';cursor:'+(i===4?'default':'pointer')+';border:'+border+';display:flex;align-items:center;justify-content:center;font-size:10px" onclick="'+(i!==4?"paintCell('"+f+"',"+i+")":'')+'">'+(i===4?'⭐':'')+'</div>';
     });
     h+='</div></div>';
@@ -2554,71 +2564,149 @@ function showModeSelect(){
           }
           solverWorker.postMessage({t:'solve',fl:fl});
         } else {
-          // ❌ 驗證失敗 → 先嘗試自動旋轉修正
+          // ❌ 驗證失敗 → 3-Phase Pipeline
           solverWorker.onmessage=prevCB;
-          var errMsg=[];
-          if(e.data.eoP)errMsg.push('邊塊方向');
-          if(e.data.coP)errMsg.push('角塊方向');
-          if(e.data.epP)errMsg.push('邊塊排列');
-          if(e.data.cpP)errMsg.push('角塊排列');
+          window._origFC=_cloneFC(faceColors);
           setTimeout(function(){
-          // === 自動旋轉修正 ===
-          var fix=tryAutoFixOrientation();
-          if(fix&&fix.fixed){
-            faceColors=fix.fc;
-            document.getElementById('info').innerHTML='<span style="color:#FFD700;font-size:13px">🔧 偵測到視角偏差：'+fix.label+'</span><div style="font-size:11px;color:rgba(255,255,255,.5);margin-top:4px">已自動修正，重新驗證中...</div>';
-            setTimeout(function(){
-              fl='';['U','R','F','D','L','B'].forEach(function(f2){faceColors[f2].forEach(function(x){fl+=C2F[x]||'?';});});
-              showModeSelect();
-            },800);
-            return;
-          }
-          // 積木全合法但奇偶性不匹配 → autofix swap 搜尋
-          var currentBad=findBadCells();
-          var currentBadCount=Object.keys(currentBad).length;
-          if(currentBadCount===0&&(e.data.epP!==e.data.cpP||e.data.eoP||e.data.coP)){
-            document.getElementById('info').innerHTML='<span style="color:rgba(0,210,255,.9);font-size:13px">🔍 積木合法但排列異常，搜尋最小修正...</span>';
-            var prevCB2=solverWorker.onmessage;
-            solverWorker.onmessage=function(ea){
-              if(ea.data.t==='autofix'){
-                solverWorker.onmessage=prevCB2;
-                if(ea.data.ok){
-                  var faces3=['U','R','F','D','L','B'];
-                  var i1=ea.data.swap[0],i2=ea.data.swap[1];
-                  var fa1=faces3[Math.floor(i1/9)],pa1=i1%9;
-                  var fa2=faces3[Math.floor(i2/9)],pa2=i2%9;
-                  var ca1=faceColors[fa1][pa1],ca2=faceColors[fa2][pa2];
-                  document.getElementById('info').innerHTML='<span style="color:#FFD700;font-size:13px">🔍 找到可能的填色誤差</span><div style="font-size:11px;color:rgba(255,255,255,.5);margin-top:4px">'+fa1+'['+pa1+']='+CN[ca1]+' 和 '+fa2+'['+pa2+']='+CN[ca2]+' 可能填反了</div>';
-                  window._suggestSwap={f1:fa1,p1:pa1,f2:fa2,p2:pa2};
-                  showEditableFaces();
-                  document.getElementById('btnRow').innerHTML='<button class="btn" style="background:rgba(255,180,0,.8);color:#000;font-weight:900" onclick="var s=window._suggestSwap;var t=faceColors[s.f1][s.p1];faceColors[s.f1][s.p1]=faceColors[s.f2][s.p2];faceColors[s.f2][s.p2]=t;showModeSelect()">💡 交換 '+CN[ca1]+'↔'+CN[ca2]+' 並重新驗證</button><button class="btn" style="margin-top:6px;font-size:11px;color:#999;background:none;border:none" onclick="showModeSelect()">🔍 不交換，直接重新驗證</button>';
-                } else {
-                  // autofix 也找不到 → 手動修正
-                  _showManualFixUI(errMsg);
+          document.getElementById('info').innerHTML='<span style="color:rgba(0,210,255,.9);font-size:14px;font-weight:900">🔧 Phase 1：視角映射校正...</span>';
+          document.getElementById('mgrid').style.display='none';
+          // === Phase 1: 靜默視角校正（同步）===
+          var bestStrategy=null,bestFC=null,bestBadCount=999;
+          for(var si=0;si<AutoOrientationMapper.strategies.length;si++){
+            var strat=AutoOrientationMapper.strategies[si];
+            var mapped=strat.fix(faceColors);
+            var badCount=Object.keys(findBadCellsFor(mapped)).length;
+            if(badCount<bestBadCount){bestBadCount=badCount;bestStrategy=strat.name;bestFC=mapped;}
+            if(badCount===0){
+              // 壞積木=0 → 送 Worker 驗證是否完整通過
+              var testFL='';['U','R','F','D','L','B'].forEach(function(f2){mapped[f2].forEach(function(x){testFL+=C2F[x]||'?';});});
+              var prev1=solverWorker.onmessage;
+              solverWorker.onmessage=function(ev){
+                if(ev.data.t==='valid'){
+                  solverWorker.onmessage=prev1;
+                  if(ev.data.ok){
+                    // 🟢 Phase 1 成功：靜默套用 → 直接求解
+                    faceColors=mapped;
+                    fl=testFL;
+                    document.getElementById('info').innerHTML='<span style="color:#FFD700;font-size:13px">🔧 '+strat.name+' 視角校正完成</span>';
+                    setTimeout(function(){showModeSelect();},500);
+                  } else {
+                    // 壞積木=0 但 epP 不匹配 → 進入 Phase 2
+                    _runPhase2(strat.name,mapped,testFL);
+                  }
                 }
-              }
-            };
-            solverWorker.postMessage({t:'autofix',fl:fl});
+              };
+              solverWorker.postMessage({t:'validate',fl:testFL});
+              return;
+            }
+          }
+          // Phase 1 所有策略都有壞積木 → 跳 Phase 3
+          if(bestBadCount>0){
+            _runPhase3();
             return;
           }
-          // 有部分旋轉修正建議
-          if(fix&&!fix.fixed&&fix.remaining<currentBadCount){
-            window._badCells=currentBad;
-            _paintIdx=0;_recountPaint();
-            var bar=_buildCorrBar();
-            var badHint='<div style="font-size:10px;color:#FF6B6B;margin-top:2px">🔴 閃爍紅框 = 不合法（'+currentBadCount+'格）</div>';
-            var suggestHint='<div style="margin-top:4px"><button class="btn" style="background:rgba(255,180,0,.3);color:#FFD700;font-size:11px;padding:4px 12px;border:1px solid rgba(255,180,0,.4)" onclick="faceColors=window._suggestFC;showModeSelect()">💡 嘗試套用 '+fix.label+'（剩'+fix.remaining+'格）</button></div>';
-            window._suggestFC=fix.fc;
-            document.getElementById('info').innerHTML='<span style="color:#E94560;font-size:13px">⚠️ 色塊有誤（'+errMsg.join('、')+'）</span>'+bar+badHint+suggestHint;
-          } else {
-            _showManualFixUI(errMsg);
-          }
-          document.getElementById('sub').innerHTML='選擇顏色 → 點格子塗色，再點同色清除';
-          showEditableFaces();
-          document.getElementById('btnRow').innerHTML='<button class="btn" style="background:rgba(0,210,255,.9);padding:10px 24px" onclick="showModeSelect()">🔍 重新驗證</button><button class="btn" style="margin-top:6px;font-size:11px;color:#999;background:none;border:none" onclick="location.reload()">🔄 重新掃描</button>';
           },600);
           return;
         }
+
+// === Phase 2: 互動式候選列表（非同步）===
+function _runPhase2(strategyName,mappedFC,mappedFL){
+  document.getElementById('info').innerHTML='<span style="color:rgba(0,210,255,.9);font-size:13px">🔍 Phase 2：'+strategyName+' + 搜尋填色誤差...</span>';
+  var prev2=solverWorker.onmessage;
+  solverWorker.onmessage=function(ea){
+    if(ea.data.t==='autofixAll'){
+      solverWorker.onmessage=prev2;
+      var swaps=ea.data.swaps;
+      if(swaps.length===0){_runPhase3();return;}
+      // 建立候選列表
+      var faces3=['U','R','F','D','L','B'];
+      var candidates=swaps.map(function(pair){
+        var i1=pair[0],i2=pair[1];
+        var f1=faces3[Math.floor(i1/9)],p1=i1%9;
+        var f2=faces3[Math.floor(i2/9)],p2=i2%9;
+        return{i:i1,j:i2,f1:f1,p1:p1,c1:mappedFC[f1][p1],f2:f2,p2:p2,c2:mappedFC[f2][p2]};
+      });
+      // 排序：同面>鄰面>易混色
+      var adjMap={U:'FRBL',R:'UFDB',F:'URDL',D:'FRBL',L:'UFDB',B:'URDL'};
+      candidates.forEach(function(s){
+        s.score=0;
+        if(s.f1===s.f2)s.score+=10;
+        if(adjMap[s.f1].indexOf(s.f2)!==-1)s.score+=5;
+        var conf=[['R','O'],['B','G'],['W','Y']];
+        conf.forEach(function(p){if((s.c1===p[0]&&s.c2===p[1])||(s.c1===p[1]&&s.c2===p[0])){s.score+=8;s.confuse=true;}});
+        if(s.p1%2===1&&s.p2%2===1)s.score+=3;
+      });
+      candidates.sort(function(a,b){return b.score-a.score;});
+      // 儲存供 UI 使用
+      window._phase2={strategyName:strategyName,mappedFC:mappedFC,candidates:candidates};
+      _showPhase2UI();
+    }
+  };
+  solverWorker.postMessage({t:'autofixAll',fl:mappedFL});
+}
+
+function _showPhase2UI(){
+  var p2=window._phase2;
+  var h='<div style="font-size:13px;font-weight:900;color:#FFD700;margin-bottom:2px">⚠️ '+p2.strategyName+' 後仍差 1 格</div>';
+  h+='<div style="font-size:10px;color:rgba(255,255,255,.5);margin-bottom:6px">找到 '+p2.candidates.length+' 組候選。對照實體魔方選擇：</div>';
+  h+='<div style="max-height:40vh;overflow-y:auto;-webkit-overflow-scrolling:touch">';
+  p2.candidates.forEach(function(s,i){
+    var tags=[];
+    if(s.f1===s.f2)tags.push('同面');
+    if(s.confuse)tags.push('易混色');
+    var tagStr=tags.length?'<span style="color:#0b0;font-size:9px;margin-left:4px">'+tags.join(' ')+'</span>':'';
+    h+='<div style="display:flex;align-items:center;gap:6px;padding:6px 8px;margin:2px 0;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:6px;cursor:pointer" onclick="_previewSwap('+i+')">';
+    h+='<span style="color:rgba(255,255,255,.3);font-size:10px;min-width:18px">'+(i+1)+'</span>';
+    h+='<span style="display:inline-block;width:14px;height:14px;border-radius:3px;background:'+CMAP[s.c1]+'"></span>';
+    h+='<span style="font-size:11px;color:#fff">'+s.f1+'['+s.p1+']'+CN[s.c1]+'</span>';
+    h+='<span style="color:rgba(255,255,255,.3);font-size:10px">↔</span>';
+    h+='<span style="display:inline-block;width:14px;height:14px;border-radius:3px;background:'+CMAP[s.c2]+'"></span>';
+    h+='<span style="font-size:11px;color:#fff">'+s.f2+'['+s.p2+']'+CN[s.c2]+'</span>';
+    h+=tagStr;
+    h+='</div>';
+  });
+  h+='</div>';
+  document.getElementById('info').innerHTML=h;
+  // 先顯示旋轉後的十字架圖
+  faceColors=_cloneFC(p2.mappedFC);
+  window._badCells=null;window._fixCells=null;
+  showEditableFaces();
+  document.getElementById('sub').innerHTML='點選候選 → 🟢綠框預覽 → 對照魔方確認';
+  document.getElementById('btnRow').innerHTML='<button class="btn" style="font-size:11px;color:#999;background:none;border:1px solid rgba(255,255,255,.15)" onclick="_runPhase3()">❌ 都不對，手動修正</button>';
+}
+
+window._previewSwap=function(idx){
+  var p2=window._phase2;
+  var s=p2.candidates[idx];
+  // 套用此 swap 到旋轉後的狀態
+  faceColors=_cloneFC(p2.mappedFC);
+  var ca1=faceColors[s.f1][s.p1],ca2=faceColors[s.f2][s.p2];
+  faceColors[s.f1][s.p1]=ca2;faceColors[s.f2][s.p2]=ca1;
+  // 綠色標記
+  window._fixCells={};
+  window._fixCells[s.f1+'_'+s.p1]='候選'+(idx+1)+': '+CN[ca1]+'→'+CN[ca2];
+  window._fixCells[s.f2+'_'+s.p2]='候選'+(idx+1)+': '+CN[ca2]+'→'+CN[ca1];
+  window._badCells=null;
+  showEditableFaces();
+  document.getElementById('sub').innerHTML='🟢 = 預覽修正。對照實體魔方，這組對嗎？';
+  document.getElementById('btnRow').innerHTML=
+    '<button class="btn" style="background:rgba(0,210,255,.9);padding:10px 24px" onclick="window._fixCells=null;showModeSelect()">✅ 沒錯，驗證求解</button>'
+    +'<button class="btn" style="margin-top:4px;font-size:11px;color:#999;background:none" onclick="faceColors=_cloneFC(window._phase2.mappedFC);window._fixCells=null;showEditableFaces();_showPhase2UI()">↩️ 不對，看其他候選</button>';
+};
+
+// === Phase 3: 手動修正（Fallback）===
+function _runPhase3(){
+  faceColors=_cloneFC(window._origFC||faceColors);
+  window._fixCells=null;
+  window._badCells=findBadCells();
+  var badCount=Object.keys(window._badCells).length;
+  var bar=_buildCorrBar();
+  var badHint=badCount>0?'<div style="font-size:10px;color:#FF6B6B;margin-top:2px">🔴 紅框 = 不合法積木（'+badCount+'格）</div>':'';
+  document.getElementById('info').innerHTML='<span style="color:#E94560;font-size:13px">⚠️ 需要手動修正</span>'+bar+badHint+'<div style="font-size:10px;color:rgba(255,255,255,.35);margin-top:2px">💡 長按紅框格子看提示</div>';
+  document.getElementById('sub').innerHTML='選擇顏色 → 點格子塗色';
+  showEditableFaces();
+  document.getElementById('btnRow').innerHTML='<button class="btn" style="background:rgba(0,210,255,.9);padding:10px 24px" onclick="showModeSelect()">🔍 重新驗證</button><button class="btn" style="margin-top:6px;font-size:11px;color:#999;background:none;border:none" onclick="location.reload()">🔄 重新開始</button>';
+}
       }
       if(e.data.t==='sol'){
         solverWorker.onmessage=prevCB;
@@ -5070,5 +5158,5 @@ function showMsg(title,desc,action,btnText){
 }
 setTimeout(function(){if(!solverWorker)initSolver();},100);
 </script>
-<div id="versionTag" style="position:fixed;top:4px;right:8px;font-size:10px;color:rgba(255,255,255,.2);z-index:99">v3.8</div>
+<div id="versionTag" style="position:fixed;top:4px;right:8px;font-size:10px;color:rgba(255,255,255,.2);z-index:99">v3.9</div>
 </body></html>
