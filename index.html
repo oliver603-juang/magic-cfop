@@ -21,7 +21,7 @@ canvas#ov{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:conta
 .bot-bar{position:absolute;bottom:0;left:0;right:0;z-index:10;padding:8px 16px 20px;background:linear-gradient(transparent,rgba(0,0,0,.9));padding-top:24px;text-align:center;display:none}
 .info{font-size:13px;color:rgba(255,255,255,.7);margin-bottom:8px}
 .mgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;width:78px;margin:0 auto 8px}
-.mcell{height:22px;border-radius:3px;border:1px solid rgba(255,255,255,.15)}
+.mcell{aspect-ratio:1;border-radius:3px;border:1px solid rgba(255,255,255,.15)}
 .btn{padding:14px 32px;border:none;border-radius:12px;font-family:'Nunito',sans-serif;font-weight:900;font-size:16px;cursor:pointer;background:#FFD700;color:#000;min-width:120px}
 .btn:active{transform:scale(.96);opacity:.9}
 .btn-sm{padding:10px 20px;font-size:14px}
@@ -2170,15 +2170,22 @@ function startManual(){
   document.getElementById('startOv').style.display='none';
   document.querySelector('.wrap').style.background='#000';
   if(vid)vid.style.display='none';
-  ['U','R','F','D','L','B'].forEach(f=>{faceColors[f]=['W','W','W','W',CC[f],'W','W','W','W'];});
-  faceColors.U[4]='W';faceColors.R[4]='B';faceColors.F[4]='R';faceColors.D[4]='Y';faceColors.L[4]='G';faceColors.B[4]='O';
+  // Init all cells as empty 'X', centers as fixed colors
+  ['U','R','F','D','L','B'].forEach(f=>{faceColors[f]=['X','X','X','X',CC[f],'X','X','X','X'];});
+  // Init paint system
+  _paintIdx=0;_paintCounts={R:0,B:0,O:0,G:0,W:0,Y:0};
   document.getElementById('topBar').style.display='block';
   document.getElementById('botBar').style.display='block';
   document.getElementById('title').textContent='✏️ 手動輸入';
-  document.getElementById('sub').textContent='點擊格子切換顏色，中心格不能改';
-  document.getElementById('info').textContent='完成後按下方按鈕';
+  _updatePaintUI();
   showEditableFaces();
-  document.getElementById('btnRow').innerHTML='<button class="btn" onclick="showModeSelect()">🧩 選擇解法</button>';
+  document.getElementById('btnRow').innerHTML='<button class="btn" onclick="finishManual()">🧩 選擇解法</button>';
+}
+function finishManual(){
+  // Check all 48 cells are filled
+  var empty=0;['U','R','F','D','L','B'].forEach(f=>{faceColors[f].forEach((c,i)=>{if(i!==4&&c==='X')empty++;});});
+  if(empty>0){document.getElementById('sub').innerHTML='<span style="color:#e55">還有 '+empty+' 格未填！</span>';return;}
+  showModeSelect();
 }
 
 // ===== SOLVER WORKER (Kociemba) =====
@@ -2318,12 +2325,63 @@ function showFacePreviews(id){
   el.innerHTML='';const FO=['U','R','F','D','L','B'];
   FO.forEach(f=>{faceColors[f].forEach((c)=>{const d=document.createElement('div');d.className='mcell';d.style.background=CMAP[c]||'#333';el.appendChild(d);});});
 }
-function showEditableFaces(){
-  const el=document.getElementById('mgrid');el.style.display='grid';el.style.gridTemplateColumns='repeat(9,1fr)';el.innerHTML='';
-  const FO=['U','R','F','D','L','B'];
-  FO.forEach(f=>{faceColors[f].forEach((c,i)=>{const d=document.createElement('div');d.className='mcell';d.style.background=CMAP[c]||'#333';d.style.cursor=i===4?'default':'pointer';if(i!==4)d.onclick=()=>cycleColor(f,i);el.appendChild(d);});});
+// Paint bucket mode: R(8)→B(8)→O(8)→G(8)→W(8)→Y(8), click again to clear
+var _paintSeq=['R','B','O','G','W','Y'];
+var _paintNames=['🔴 紅','🔵 藍','🟠 橘','🟢 綠','⬜ 白','🟡 黃'];
+var _paintIdx=0;
+var _paintCounts={R:0,B:0,O:0,G:0,W:0,Y:0};
+function _recountPaint(){_paintCounts={R:0,B:0,O:0,G:0,W:0,Y:0};['U','R','F','D','L','B'].forEach(f=>{faceColors[f].forEach((c,i)=>{if(i!==4&&c!=='X')_paintCounts[c]=(_paintCounts[c]||0)+1;});});}
+function _autoAdvance(){while(_paintIdx<6&&_paintCounts[_paintSeq[_paintIdx]]>=8)_paintIdx++;_updatePaintUI();}
+function _updatePaintUI(){
+  var sub=document.getElementById('sub');
+  if(_paintIdx>=6){sub.innerHTML='✅ 48格填完！按下方按鈕繼續';return;}
+  var c=_paintSeq[_paintIdx],n=_paintCounts[c]||0;
+  sub.innerHTML=_paintNames[_paintIdx]+' <b>'+n+'/8</b>　點格子塗色，再點清除';
+  // color indicator bar
+  var bar='';_paintSeq.forEach((pc,pi)=>{var cnt=_paintCounts[pc]||0;var active=pi===_paintIdx;bar+='<span style="display:inline-block;width:28px;height:28px;border-radius:6px;background:'+(CMAP[pc]||'#333')+';margin:2px;border:'+(active?'3px solid #FFD700':'2px solid rgba(255,255,255,.15)')+';text-align:center;line-height:28px;font-size:11px;color:rgba(0,0,0,.6);cursor:pointer" onclick="_paintIdx='+pi+';_updatePaintUI();showEditableFaces()">'+cnt+'</span>';});
+  document.getElementById('info').innerHTML=bar;
 }
-function cycleColor(face,pos){const colors=['W','R','B','O','G','Y'];const cur=faceColors[face][pos];faceColors[face][pos]=colors[(colors.indexOf(cur)+1)%6];showEditableFaces();}
+function paintCell(f,i){
+  if(i===4)return;
+  var cur=faceColors[f][i],brush=_paintSeq[_paintIdx];
+  if(cur===brush){
+    // Same color = clear
+    faceColors[f][i]='X';_paintCounts[brush]--;
+  } else if(cur!=='X'){
+    // Overwrite different color: remove old, add new
+    _paintCounts[cur]--;
+    if((_paintCounts[brush]||0)>=8)return;
+    faceColors[f][i]=brush;_paintCounts[brush]++;
+  } else {
+    // Empty cell: paint
+    if((_paintCounts[brush]||0)>=8)return;
+    faceColors[f][i]=brush;_paintCounts[brush]++;
+  }
+  _autoAdvance();showEditableFaces();
+}
+function showEditableFaces(){
+  const el=document.getElementById('mgrid');el.style.display='block';el.innerHTML='';
+  const CM=CMAP;CM['X']='#222';
+  const sz='min(8vw,32px)';
+  function face3x3(f,label){
+    var h='<div style="display:inline-block;vertical-align:top;margin:1px"><div style="font-size:9px;color:#888;text-align:center">'+label+'</div><div style="display:grid;grid-template-columns:repeat(3,'+sz+');gap:1px">';
+    faceColors[f].forEach((c,i)=>{
+      var bg=CM[c]||'#222';
+      var border=i===4?'2px solid rgba(255,255,255,.4)':'1px solid rgba(255,255,255,.15)';
+      h+='<div class="mcell" style="width:'+sz+';height:'+sz+';background:'+bg+';cursor:'+(i===4?'default':'pointer')+';border:'+border+';display:flex;align-items:center;justify-content:center;font-size:10px" onclick="'+(i!==4?"paintCell('"+f+"',"+i+")":'')+'">'+(i===4?'⭐':'')+'</div>';
+    });
+    h+='</div></div>';
+    return h;
+  }
+  var html='<div style="text-align:center;padding:4px 0">';
+  html+='<div>'+face3x3('U','上(U)')+'</div>';
+  html+='<div style="display:flex;justify-content:center;gap:2px">'+face3x3('L','左(L)')+face3x3('F','前(F)')+face3x3('R','右(R)')+'</div>';
+  html+='<div>'+face3x3('D','下(D)')+'</div>';
+  html+='<div>'+face3x3('B','後(B)')+'</div>';
+  html+='</div>';
+  el.innerHTML=html;
+}
+function cycleColor(face,pos){paintCell(face,pos);}
 
 // ===== MODE SELECT =====
 
