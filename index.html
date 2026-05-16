@@ -2373,7 +2373,22 @@ var _paintNames=['🔴 紅','🔵 藍','🟠 橘','🟢 綠','⬜ 白','🟡 黃
 var _paintIdx=0;
 var _paintCounts={R:0,B:0,O:0,G:0,W:0,Y:0};
 function _recountPaint(){_paintCounts={R:0,B:0,O:0,G:0,W:0,Y:0};['U','R','F','D','L','B'].forEach(f=>{faceColors[f].forEach((c,i)=>{if(i!==4&&c!=='X')_paintCounts[c]=(_paintCounts[c]||0)+1;});});}
-function _autoAdvance(){if(document.getElementById('corrColorBar'))return _updatePaintUI();while(_paintIdx<6&&_paintCounts[_paintSeq[_paintIdx]]>=8)_paintIdx++;_updatePaintUI();}
+function _autoAdvance(){
+  if(document.getElementById('corrColorBar'))return _updatePaintUI();
+  while(_paintIdx<6&&_paintCounts[_paintSeq[_paintIdx]]>=8)_paintIdx++;
+  // 前 5 色填完（40 格）→ 自動填入最後一色
+  if(_paintIdx===5){
+    var lastColor=_paintSeq[5];
+    var filled=0;
+    ['U','R','F','D','L','B'].forEach(function(f){
+      faceColors[f].forEach(function(c,i){
+        if(i!==4&&c==='X'){faceColors[f][i]=lastColor;_paintCounts[lastColor]++;filled++;}
+      });
+    });
+    if(filled>0){_paintIdx=6;showEditableFaces();}
+  }
+  _updatePaintUI();
+}
 function _updatePaintUI(){
   // Update correction color bar if present
   var corrBar=document.getElementById('corrColorBar');
