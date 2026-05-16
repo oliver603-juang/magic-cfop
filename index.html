@@ -2774,11 +2774,7 @@ function doClassifyInner(){
 function showHumanVerifyUI(items){
   var idx=0;
   function showItem(){
-    if(idx>=items.length){
-      // All verified, continue
-      showModeSelect();
-      return;
-    }
+    if(idx>=items.length){showModeSelect();return;}
     var item=items[idx];
     var faceName={U:'上面',R:'右面',F:'前面',D:'下面',L:'左面',B:'後面'}[item.face]||item.face;
     var posName=['左上','上','右上','左','中','右','左下','下','右下'][item.pos];
@@ -2788,21 +2784,37 @@ function showHumanVerifyUI(items){
     var rgb=item.rgb;
     var rgbHex='rgb('+rgb[0]+','+rgb[1]+','+rgb[2]+')';
     
+    // 建立該面的 3×3 色塊圖，被質疑的格子閃紅框
+    var sz='min(14vw,56px)';
+    var grid='<div style="display:grid;grid-template-columns:repeat(3,'+sz+');gap:2px;justify-content:center;margin:10px 0">';
+    faceColors[item.face].forEach(function(c,i){
+      var bg=CMAP[c]||'#333';
+      if(c==='X')bg='#222';
+      var isTarget=i===item.pos;
+      var border=isTarget?'3px solid rgba(255,60,60,.9)':'2px solid rgba(255,255,255,.15)';
+      var cls=isTarget?'mcell mcell-warn':'mcell';
+      var label=i===4?'⭐':(isTarget?'❓':'');
+      grid+='<div class="'+cls+'" style="width:'+sz+';height:'+sz+';background:'+bg+';border:'+border+';display:flex;align-items:center;justify-content:center;font-size:'+(isTarget?'18px':'10px')+';border-radius:4px">'+label+'</div>';
+    });
+    grid+='</div>';
+    
     var el=document.getElementById('info');
-    el.innerHTML='<div style="font-size:14px;font-weight:900;color:#FFD700;margin-bottom:6px">🔍 顏色確認 ('+(idx+1)+'/'+items.length+')</div>'
-      +'<div style="font-size:12px;color:rgba(255,255,255,.6);margin-bottom:8px">'+faceName+' '+posName+' 的顏色不太確定</div>'
-      +'<div style="display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:10px">'
-      +'<div style="text-align:center"><div style="font-size:9px;color:rgba(255,255,255,.4)">掃描結果</div><div style="width:40px;height:40px;border-radius:8px;background:'+rgbHex+';border:2px solid rgba(255,255,255,.3)"></div></div>'
+    el.innerHTML='<div style="font-size:14px;font-weight:900;color:#FFD700;margin-bottom:4px">🔍 顏色確認 ('+(idx+1)+'/'+items.length+')</div>'
+      +'<div style="font-size:12px;color:rgba(255,255,255,.6);margin-bottom:4px">'+faceName+' '+posName+' 的顏色不太確定</div>'
+      +grid
+      +'<div style="display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:4px">'
+      +'<div style="text-align:center"><div style="font-size:9px;color:rgba(255,255,255,.4)">掃描結果</div><div style="width:36px;height:36px;border-radius:8px;background:'+rgbHex+';border:2px solid rgba(255,255,255,.3)"></div></div>'
       +'<div style="font-size:18px;color:rgba(255,255,255,.3)">→</div>'
       +'<div style="font-size:13px;color:rgba(255,255,255,.5)">是哪個？</div>'
       +'</div>';
 
+    document.getElementById('mgrid').style.display='none';
     var btnRow=document.getElementById('btnRow');
     btnRow.innerHTML=
-      '<button class="btn" style="background:'+c1Hex+';color:'+(c1==='Y'||c1==='W'?'#000':'#fff')+';font-size:16px;font-weight:900;padding:12px 28px;min-width:100px" onclick="humanPickColor(\''+c1+'\')">'+c1Name+'</button>'
-      +'<button class="btn" style="background:'+c2Hex+';color:'+(c2==='Y'||c2==='W'?'#000':'#fff')+';font-size:16px;font-weight:900;padding:12px 28px;min-width:100px;margin-top:6px" onclick="humanPickColor(\''+c2+'\')">'+c2Name+'</button>';
-      
-    showFacePreviews('mgrid');
+      '<div style="display:flex;gap:8px;justify-content:center">'
+      +'<button class="btn" style="background:'+c1Hex+';color:'+(c1==='Y'||c1==='W'?'#000':'#fff')+';font-size:16px;font-weight:900;padding:12px 28px;min-width:100px" onclick="humanPickColor(\''+c1+'\')">'+c1Name+'</button>'
+      +'<button class="btn" style="background:'+c2Hex+';color:'+(c2==='Y'||c2==='W'?'#000':'#fff')+';font-size:16px;font-weight:900;padding:12px 28px;min-width:100px" onclick="humanPickColor(\''+c2+'\')">'+c2Name+'</button>'
+      +'</div>';
   }
   
   window.humanPickColor=function(chosen){
