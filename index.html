@@ -2564,135 +2564,111 @@ function showModeSelect(){
           }
           solverWorker.postMessage({t:'solve',fl:fl});
         } else {
-          // ❌ 驗證失敗 → 3-Phase Pipeline
+          // ❌ 驗證失敗 → 簡化修復流程
           solverWorker.onmessage=prevCB;
           window._origFC=_cloneFC(faceColors);
           setTimeout(function(){
-          document.getElementById('info').innerHTML='<span style="color:rgba(0,210,255,.9);font-size:14px;font-weight:900">🔧 Phase 1：視角映射校正...</span>';
+          document.getElementById('info').innerHTML='<span style="color:rgba(0,210,255,.9);font-size:14px;font-weight:900">🔧 視角映射校正中...</span>';
           document.getElementById('mgrid').style.display='none';
-          // === Phase 1: 靜默視角校正（同步）===
-          var bestStrategy=null,bestFC=null,bestBadCount=999;
+          // === Phase 1: 嘗試 8 種視角旋轉，靜默通過 ===
+          var bestStrategy=null,bestFC=null,bestBadCount=999,bestFL='';
           for(var si=0;si<AutoOrientationMapper.strategies.length;si++){
             var strat=AutoOrientationMapper.strategies[si];
             var mapped=strat.fix(faceColors);
             var badCount=Object.keys(findBadCellsFor(mapped)).length;
-            if(badCount<bestBadCount){bestBadCount=badCount;bestStrategy=strat.name;bestFC=mapped;}
+            if(badCount<bestBadCount){bestBadCount=badCount;bestStrategy=strat.name;bestFC=mapped;
+              bestFL='';['U','R','F','D','L','B'].forEach(function(f2){mapped[f2].forEach(function(x){bestFL+=C2F[x]||'?';});});
+            }
             if(badCount===0){
-              // 壞積木=0 → 送 Worker 驗證是否完整通過
               var testFL='';['U','R','F','D','L','B'].forEach(function(f2){mapped[f2].forEach(function(x){testFL+=C2F[x]||'?';});});
               var prev1=solverWorker.onmessage;
+              (function(st,mp,tfl){
               solverWorker.onmessage=function(ev){
                 if(ev.data.t==='valid'){
                   solverWorker.onmessage=prev1;
                   if(ev.data.ok){
                     // 🟢 Phase 1 成功：靜默套用 → 直接求解
-                    faceColors=mapped;
-                    fl=testFL;
-                    document.getElementById('info').innerHTML='<span style="color:#FFD700;font-size:13px">🔧 '+strat.name+' 視角校正完成</span>';
+                    faceColors=mp;fl=tfl;
+                    document.getElementById('info').innerHTML='<span style="color:#FFD700;font-size:13px">🔧 '+st.name+' 視角校正完成</span>';
                     setTimeout(function(){showModeSelect();},500);
                   } else {
-                    // 壞積木=0 但 epP 不匹配 → 進入 Phase 2
-                    _runPhase2(strat.name,mapped,testFL);
+                    // 壞積木=0 但 epP 不匹配 → Phase 2: 虛擬修正+求解
+                    _runDamageDetect(st.name,mp,tfl);
                   }
                 }
               };
+              })(strat,mapped,testFL);
               solverWorker.postMessage({t:'validate',fl:testFL});
               return;
             }
           }
-          // Phase 1 所有策略都有壞積木 → 跳 Phase 3
-          if(bestBadCount>0){
-            _runPhase3();
+          // 所有策略都有壞積木 → 用最佳策略做虛擬修正
+          if(bestBadCount>0&&bestFC){
+            _runDamageDetect(bestStrategy,bestFC,bestFL);
             return;
           }
+          _runPhase3();
           },600);
           return;
         }
 
-// === Phase 2: 互動式候選列表（非同步）===
-function _runPhase2(strategyName,mappedFC,mappedFL){
-  document.getElementById('info').innerHTML='<span style="color:rgba(0,210,255,.9);font-size:13px">🔍 Phase 2：'+strategyName+' + 搜尋填色誤差...</span>';
+// === Phase 2: 魔方損毀偵測模式 ===
+// 原理：強行修正數學特徵 → Kociemba 求解 → 使用者照做 → 沒歸位的零件就是壞的
+function _runDamageDetect(strategyName,mappedFC,mappedFL){
+  faceColors=_cloneFC(mappedFC);
+  document.getElementById('info').innerHTML='<span style="color:rgba(0,210,255,.9);font-size:13px">🔍 偵測到結構異常，虛擬修正中...</span>';
+  // 用 Worker autofix 找到第一個合法 swap（只需要 1 個就夠）
   var prev2=solverWorker.onmessage;
   solverWorker.onmessage=function(ea){
-    if(ea.data.t==='autofixAll'){
-      solverWorker.onmessage=prev2;
-      var swaps=ea.data.swaps;
-      if(swaps.length===0){_runPhase3();return;}
-      // 建立候選列表
-      var faces3=['U','R','F','D','L','B'];
-      var candidates=swaps.map(function(pair){
-        var i1=pair[0],i2=pair[1];
-        var f1=faces3[Math.floor(i1/9)],p1=i1%9;
-        var f2=faces3[Math.floor(i2/9)],p2=i2%9;
-        return{i:i1,j:i2,f1:f1,p1:p1,c1:mappedFC[f1][p1],f2:f2,p2:p2,c2:mappedFC[f2][p2]};
-      });
-      // 排序：同面>鄰面>易混色
-      var adjMap={U:'FRBL',R:'UFDB',F:'URDL',D:'FRBL',L:'UFDB',B:'URDL'};
-      candidates.forEach(function(s){
-        s.score=0;
-        if(s.f1===s.f2)s.score+=10;
-        if(adjMap[s.f1].indexOf(s.f2)!==-1)s.score+=5;
-        var conf=[['R','O'],['B','G'],['W','Y']];
-        conf.forEach(function(p){if((s.c1===p[0]&&s.c2===p[1])||(s.c1===p[1]&&s.c2===p[0])){s.score+=8;s.confuse=true;}});
-        if(s.p1%2===1&&s.p2%2===1)s.score+=3;
-      });
-      candidates.sort(function(a,b){return b.score-a.score;});
-      // 儲存供 UI 使用
-      window._phase2={strategyName:strategyName,mappedFC:mappedFC,candidates:candidates};
-      _showPhase2UI();
+    if(ea.data.t==='autofix'){
+      if(ea.data.ok){
+        // 有 swap → 求解虛擬修正後的狀態
+        var fixedFL=ea.data.str;
+        solverWorker.onmessage=function(es){
+          if(es.data.t==='sol'){
+            solverWorker.onmessage=prev2;
+            var steps=es.data.s.trim().split(/\s+/).length;
+            window._kSolution=es.data.s;
+            window._bridgedState=bridgeToCFOP(es.data.s);
+            // 顯示損毀偵測結果
+            var faces3=['U','R','F','D','L','B'];
+            var i1=ea.data.swap[0],i2=ea.data.swap[1];
+            var fa1=faces3[Math.floor(i1/9)],pa1=i1%9;
+            var fa2=faces3[Math.floor(i2/9)],pa2=i2%9;
+            window._fixCells={};
+            window._fixCells[fa1+'_'+pa1]='虛擬修正';
+            window._fixCells[fa2+'_'+pa2]='虛擬修正';
+            window._badCells=null;
+            showEditableFaces();
+            var h='<div style="font-size:14px;font-weight:900;color:#FFD700">🔧 偵測到魔方結構損毀</div>';
+            h+='<div style="font-size:11px;color:rgba(255,255,255,.6);margin-top:6px;line-height:1.6">';
+            if(strategyName!=='原始')h+='視角校正：'+strategyName+'<br>';
+            h+='系統已在背景虛擬修正排列異常<br>';
+            h+='<span style="color:rgba(0,230,64,.9)">請照下方步驟操作實體魔方</span><br>';
+            h+='轉完後，<b style="color:#FF6B6B">沒有歸位的零件就是損毀處</b></div>';
+            h+='<div style="font-size:10px;color:rgba(0,230,64,.6);margin-top:4px">🟢 綠框 = 程式虛擬修正的位置（不影響損毀偵測）</div>';
+            document.getElementById('info').innerHTML=h;
+            document.getElementById('sub').innerHTML='';
+            document.getElementById('btnRow').innerHTML=
+              '<button class="btn" onclick="window._fixCells=null;startKociemba()">🔍 開始損毀偵測（'+steps+'步）</button>'
+              +'<button class="btn" style="margin-top:8px;background:rgba(0,210,255,.9)" onclick="window._fixCells=null;startKociemba()">🚀 最速解（'+steps+'步）</button>'
+              +'<button class="btn" style="margin-top:6px;font-size:11px;color:#999;background:none;border:none" onclick="_runPhase3()">✏️ 改為手動修正色塊</button>';
+          }
+          if(es.data.t==='err'){
+            solverWorker.onmessage=prev2;
+            _runPhase3();
+          }
+        };
+        solverWorker.postMessage({t:'solve',fl:fixedFL});
+      } else {
+        // autofix 也失敗 → 手動
+        solverWorker.onmessage=prev2;
+        _runPhase3();
+      }
     }
   };
-  solverWorker.postMessage({t:'autofixAll',fl:mappedFL});
+  solverWorker.postMessage({t:'autofix',fl:mappedFL});
 }
-
-function _showPhase2UI(){
-  var p2=window._phase2;
-  var h='<div style="font-size:13px;font-weight:900;color:#FFD700;margin-bottom:2px">⚠️ '+p2.strategyName+' 後仍差 1 格</div>';
-  h+='<div style="font-size:10px;color:rgba(255,255,255,.5);margin-bottom:6px">找到 '+p2.candidates.length+' 組候選。對照實體魔方選擇：</div>';
-  h+='<div style="max-height:40vh;overflow-y:auto;-webkit-overflow-scrolling:touch">';
-  p2.candidates.forEach(function(s,i){
-    var tags=[];
-    if(s.f1===s.f2)tags.push('同面');
-    if(s.confuse)tags.push('易混色');
-    var tagStr=tags.length?'<span style="color:#0b0;font-size:9px;margin-left:4px">'+tags.join(' ')+'</span>':'';
-    h+='<div style="display:flex;align-items:center;gap:6px;padding:6px 8px;margin:2px 0;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:6px;cursor:pointer" onclick="_previewSwap('+i+')">';
-    h+='<span style="color:rgba(255,255,255,.3);font-size:10px;min-width:18px">'+(i+1)+'</span>';
-    h+='<span style="display:inline-block;width:14px;height:14px;border-radius:3px;background:'+CMAP[s.c1]+'"></span>';
-    h+='<span style="font-size:11px;color:#fff">'+s.f1+'['+s.p1+']'+CN[s.c1]+'</span>';
-    h+='<span style="color:rgba(255,255,255,.3);font-size:10px">↔</span>';
-    h+='<span style="display:inline-block;width:14px;height:14px;border-radius:3px;background:'+CMAP[s.c2]+'"></span>';
-    h+='<span style="font-size:11px;color:#fff">'+s.f2+'['+s.p2+']'+CN[s.c2]+'</span>';
-    h+=tagStr;
-    h+='</div>';
-  });
-  h+='</div>';
-  document.getElementById('info').innerHTML=h;
-  // 先顯示旋轉後的十字架圖
-  faceColors=_cloneFC(p2.mappedFC);
-  window._badCells=null;window._fixCells=null;
-  showEditableFaces();
-  document.getElementById('sub').innerHTML='點選候選 → 🟢綠框預覽 → 對照魔方確認';
-  document.getElementById('btnRow').innerHTML='<button class="btn" style="font-size:11px;color:#999;background:none;border:1px solid rgba(255,255,255,.15)" onclick="_runPhase3()">❌ 都不對，手動修正</button>';
-}
-
-window._previewSwap=function(idx){
-  var p2=window._phase2;
-  var s=p2.candidates[idx];
-  // 套用此 swap 到旋轉後的狀態
-  faceColors=_cloneFC(p2.mappedFC);
-  var ca1=faceColors[s.f1][s.p1],ca2=faceColors[s.f2][s.p2];
-  faceColors[s.f1][s.p1]=ca2;faceColors[s.f2][s.p2]=ca1;
-  // 綠色標記
-  window._fixCells={};
-  window._fixCells[s.f1+'_'+s.p1]='候選'+(idx+1)+': '+CN[ca1]+'→'+CN[ca2];
-  window._fixCells[s.f2+'_'+s.p2]='候選'+(idx+1)+': '+CN[ca2]+'→'+CN[ca1];
-  window._badCells=null;
-  showEditableFaces();
-  document.getElementById('sub').innerHTML='🟢 = 預覽修正。對照實體魔方，這組對嗎？';
-  document.getElementById('btnRow').innerHTML=
-    '<button class="btn" style="background:rgba(0,210,255,.9);padding:10px 24px" onclick="window._fixCells=null;showModeSelect()">✅ 沒錯，驗證求解</button>'
-    +'<button class="btn" style="margin-top:4px;font-size:11px;color:#999;background:none" onclick="faceColors=_cloneFC(window._phase2.mappedFC);window._fixCells=null;showEditableFaces();_showPhase2UI()">↩️ 不對，看其他候選</button>';
-};
 
 // === Phase 3: 手動修正（Fallback）===
 function _runPhase3(){
