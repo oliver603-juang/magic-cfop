@@ -2229,10 +2229,28 @@ function finishManual(){
 }
 
 // ===== 鏡頭校正模式 =====
-// 原理：掃描 1 面 → 使用者手動輸入同一面的正確色塊 → 自動比對出鏡射規則
-// 之後所有掃描都套用這個校正
-window._camCalibration=null; // {perFace:{U:'LR',R:'LR',...}} or null
-try{var saved=localStorage.getItem('camCalib');if(saved)window._camCalibration=JSON.parse(saved);}catch(e){}
+// 校正內容：① 六面方位鏡射 ② 色塊分類參數（anchor RGB）
+// 按裝置分別儲存（筆電/手機各自的 profile）
+window._camCalibration=null;
+try{
+  var devKey=_getDeviceKey();
+  var saved=localStorage.getItem('camCalib_'+devKey);
+  if(saved)window._camCalibration=JSON.parse(saved);
+}catch(e){}
+
+function _getDeviceKey(){
+  // 筆電 vs 手機：用螢幕寬度 + 是否有觸控粗略區分
+  var w=screen.width||0;
+  var touch='ontouchstart' in window;
+  if(w>1000&&!touch)return 'desktop';
+  if(w>1000&&touch)return 'tablet';
+  return 'mobile';
+}
+
+function _saveCalibration(calib){
+  window._camCalibration=calib;
+  try{localStorage.setItem('camCalib_'+_getDeviceKey(),JSON.stringify(calib));}catch(e){}
+}
 
 function startCalibration(){
   document.getElementById('startOv').classList.remove('show');
@@ -2240,22 +2258,24 @@ function startCalibration(){
   document.getElementById('topBar').style.display='block';
   document.getElementById('botBar').style.display='block';
   initSolver();
+  var devKey=_getDeviceKey();
   document.getElementById('title').textContent='🔧 鏡頭校正';
-  document.getElementById('info').innerHTML='<div style="font-size:12px;color:rgba(255,255,255,.7);line-height:1.6">步驟：<br>① 拿一個打亂的魔方<br>② 掃描 6 面（跟平常一樣）<br>③ 手動輸入同樣的 6 面<br>④ 系統自動比對出鏡射規則</div>';
+  document.getElementById('info').innerHTML='<div style="font-size:12px;color:rgba(255,255,255,.7);line-height:1.6">裝置類型：<b>'+devKey+'</b><br>步驟：<br>① 拿一個打亂的魔方<br>② 掃描 6 面<br>③ 手動輸入同樣的 6 面<br>④ 自動比對方位+學習顏色</div>';
   document.getElementById('sub').textContent='';
   document.getElementById('btnRow').innerHTML='<button class="btn" onclick="_calibStep1()">📸 開始掃描</button>';
 }
 
 async function _calibStep1(){
-  // 啟動相機，先暫時關掉所有校正
   window._calibInProgress=true;
   var oldCalib=window._camCalibration;
-  window._camCalibration=null;
+  window._camCalibration=null; // 掃描時不做任何校正
   try{await startApp();}catch(e){alert('相機錯誤: '+e.message);return;}
   document.getElementById('title').textContent='🔧 校正 - 步驟① 掃描6面';
-  // 攔截 doClassify 完成後進入步驟②
   var _origClassify2=doClassify;
   window.doClassify=function(){
+    // 儲存 raw RGB（分類前的原始資料）
+    window._calibRawData={};
+    ['U','R','F','D','L','B'].forEach(function(f){if(rawData[f])window._calibRawData[f]=rawData[f].slice();});
     _origClassify2.apply(this,arguments);
     setTimeout(function(){
       if(faceColors&&faceColors.U&&faceColors.U[0]!=='X'){
@@ -2269,20 +2289,17 @@ async function _calibStep1(){
 }
 
 function _calibStep2(){
-  // 掃描完成，現在讓使用者手動輸入同一面
   if(vid)vid.style.display='none';
   document.getElementById('title').textContent='🔧 校正 - 步驟② 手動輸入';
-  document.getElementById('info').innerHTML='<div style="font-size:12px;color:rgba(255,255,255,.7)">現在請看著同一個魔方，手動填入正確的色塊。<br>完成後系統會自動比對出鏡射規則。</div>';
-  // 清空 faceColors 進入手動模式
+  document.getElementById('info').innerHTML='<div style="font-size:12px;color:rgba(255,255,255,.7)">看著同一個魔方，手動填入正確色塊。</div>';
   ['U','R','F','D','L','B'].forEach(f=>{faceColors[f]=['X','X','X','X',CC[f],'X','X','X','X'];});
   _paintIdx=0;_paintCounts={R:0,B:0,O:0,G:0,W:0,Y:0};
   _updatePaintUI();
   showEditableFaces();
-  document.getElementById('btnRow').innerHTML='<button class="btn" onclick="_calibStep3()">🧩 完成輸入，開始比對</button>';
+  document.getElementById('btnRow').innerHTML='<button class="btn" onclick="_calibStep3()">🧩 完成，開始比對</button>';
 }
 
 function _calibStep3(){
-  // 檢查是否填完
   var empty=0;['U','R','F','D','L','B'].forEach(f=>{faceColors[f].forEach((c,i)=>{if(i!==4&&c==='X')empty++;});});
   if(empty>0){document.getElementById('sub').innerHTML='<span style="color:#e55">還有 '+empty+' 格未填！</span>';return;}
   
@@ -2290,50 +2307,94 @@ function _calibStep3(){
   ['U','R','F','D','L','B'].forEach(function(f){manual[f]=faceColors[f].slice();});
   var scan=window._calibScanResult;
   
-  // 逐面比對：嘗試 none/LR/UD/180，找匹配最高的
+  // === ① 方位比對 ===
   function matchCount(a,b){var c=0;for(var i=0;i<9;i++)if(a[i]===b[i])c++;return c;}
   function mirrorLR(a){return[a[2],a[1],a[0],a[5],a[4],a[3],a[8],a[7],a[6]];}
   function mirrorUD(a){return[a[6],a[7],a[8],a[3],a[4],a[5],a[0],a[1],a[2]];}
   function rot180(a){return[a[8],a[7],a[6],a[5],a[4],a[3],a[2],a[1],a[0]];}
-  
   var transforms=[
     {name:'none',fn:function(a){return a.slice();}},
-    {name:'LR',fn:mirrorLR},
-    {name:'UD',fn:mirrorUD},
-    {name:'180',fn:rot180}
+    {name:'LR',fn:mirrorLR},{name:'UD',fn:mirrorUD},{name:'180',fn:rot180}
   ];
   
-  var calibResult={};
-  var report='';
+  var orientResult={};
   ['U','R','F','D','L','B'].forEach(function(f){
     var best={name:'none',score:0};
     transforms.forEach(function(tr){
-      var transformed=tr.fn(scan[f]);
-      var score=matchCount(transformed,manual[f]);
-      if(score>best.score){best={name:tr.name,score:score};}
+      var score=matchCount(tr.fn(scan[f]),manual[f]);
+      if(score>best.score)best={name:tr.name,score:score};
     });
-    calibResult[f]=best.name;
-    report+=f+': '+best.name+' ('+best.score+'/9)\n';
+    orientResult[f]=best;
   });
   
-  // 儲存校正結果
-  window._camCalibration={perFace:calibResult};
-  try{localStorage.setItem('camCalib',JSON.stringify(window._camCalibration));}catch(e){}
+  // === ② 色塊分類參數學習 ===
+  // 用手動輸入的顏色標籤 + 掃描的 raw RGB，計算每色的平均 anchor RGB
+  var rawRGB=window._calibRawData;
+  var colorSamples={W:[],R:[],B:[],O:[],G:[],Y:[]};
+  ['U','R','F','D','L','B'].forEach(function(f){
+    if(!rawRGB[f])return;
+    var bestTr=transforms.find(function(t){return t.name===orientResult[f].name;});
+    // 用校正後的索引對應手動標籤
+    for(var i=0;i<9;i++){
+      var manualColor=manual[f][i];
+      // 反算校正前的 raw 索引
+      var rawIdx=i;
+      if(bestTr&&bestTr.name==='LR'){rawIdx=[2,1,0,5,4,3,8,7,6][i];}
+      else if(bestTr&&bestTr.name==='UD'){rawIdx=[6,7,8,3,4,5,0,1,2][i];}
+      else if(bestTr&&bestTr.name==='180'){rawIdx=[8,7,6,5,4,3,2,1,0][i];}
+      if(rawRGB[f][rawIdx]&&manualColor&&manualColor!=='X'){
+        colorSamples[manualColor].push(rawRGB[f][rawIdx]);
+      }
+    }
+  });
+  
+  // 計算每色的平均 RGB
+  var learnedAnchors={};
+  Object.keys(colorSamples).forEach(function(color){
+    var samples=colorSamples[color];
+    if(samples.length===0)return;
+    var rr=0,gg=0,bb=0;
+    samples.forEach(function(rgb){rr+=rgb[0];gg+=rgb[1];bb+=rgb[2];});
+    var n=samples.length;
+    learnedAnchors[color]=[Math.round(rr/n),Math.round(gg/n),Math.round(bb/n)];
+  });
+  
+  // === ③ 儲存 ===
+  var calib={
+    perFace:{},'anchors':learnedAnchors,
+    device:_getDeviceKey(),
+    date:new Date().toISOString().substring(0,10)
+  };
+  ['U','R','F','D','L','B'].forEach(function(f){calib.perFace[f]=orientResult[f].name;});
+  _saveCalibration(calib);
   window._calibInProgress=false;
   
-  // 顯示結果
+  // === ④ 顯示結果 ===
   var h='<div style="font-size:14px;font-weight:900;color:#0b0;margin-bottom:6px">✅ 校正完成！</div>';
-  h+='<div style="font-size:11px;color:rgba(255,255,255,.6);line-height:1.6">';
+  h+='<div style="font-size:11px;color:rgba(255,255,255,.6);line-height:1.8">';
+  h+='<b>方位校正：</b><br>';
+  var cn={U:'上',R:'右',F:'前',D:'下',L:'左',B:'後'};
+  var trName={none:'不翻轉',LR:'←→左右',UD:'↕上下','180':'↻180°'};
   ['U','R','F','D','L','B'].forEach(function(f){
-    var cn={U:'上',R:'右',F:'前',D:'下',L:'左',B:'後'};
-    var trName={none:'不需翻轉',LR:'←→ 左右鏡射',UD:'↕ 上下鏡射','180':'↻ 旋轉180°'};
-    h+=cn[f]+'('+f+'): '+(trName[calibResult[f]]||calibResult[f])+'<br>';
+    h+=cn[f]+'('+f+'): '+(trName[orientResult[f].name])+' ('+orientResult[f].score+'/9)<br>';
   });
+  h+='<br><b>顏色錨點（學習到的 RGB）：</b><br>';
+  Object.entries(learnedAnchors).forEach(function(e){
+    h+='<span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:rgb('+e[1].join(',')+');vertical-align:middle"></span> '+CN[e[0]]+': rgb('+e[1].join(',')+')<br>';
+  });
+  h+='<br>裝置: <b>'+_getDeviceKey()+'</b>　樣本: '+Object.values(colorSamples).reduce(function(s,a){return s+a.length;},0)+' 格';
   h+='</div>';
-  h+='<div style="font-size:10px;color:rgba(255,255,255,.35);margin-top:4px">已儲存，下次掃描自動套用。</div>';
-  document.getElementById('title').textContent='✅ 鏡頭校正完成';
+  document.getElementById('title').textContent='✅ 校正完成';
   document.getElementById('info').innerHTML=h;
-  document.getElementById('btnRow').innerHTML='<button class="btn" onclick="location.reload()">🏠 回首頁開始使用</button><button class="btn" style="margin-top:6px;font-size:11px;color:#999;background:none" onclick="localStorage.removeItem(\'camCalib\');window._camCalibration=null;location.reload()">🗑️ 清除校正</button>';
+  document.getElementById('btnRow').innerHTML='<button class="btn" onclick="location.reload()">🏠 回首頁</button><button class="btn" style="margin-top:6px;font-size:11px;color:#999;background:none" onclick="_clearCalibration()">🗑️ 清除校正</button>';
+}
+
+function _clearCalibration(){
+  localStorage.removeItem('camCalib_desktop');
+  localStorage.removeItem('camCalib_mobile');
+  localStorage.removeItem('camCalib_tablet');
+  window._camCalibration=null;
+  location.reload();
 }
 
 // ===== SOLVER WORKER (Kociemba) =====
@@ -2908,10 +2969,21 @@ function doClassifyInner(){
   function toHSV(r,g,b){var rf=r/255,gf=g/255,bf=b/255,mx=Math.max(rf,gf,bf),mn=Math.min(rf,gf,bf),d=mx-mn,v=mx,s=mx>0?d/mx:0,h=0;if(d>0.001){if(mx===rf)h=60*(((gf-bf)/d)%6);else if(mx===gf)h=60*((bf-rf)/d+2);else h=60*((rf-gf)/d+4);if(h<0)h+=360;}return[h,s,v];}
   function smartDist(r,g,b,ar,ag,ab,tc){var[l1,a1,b1]=rgb2lab(r,g,b),[l2,a2,b2]=rgb2lab(ar,ag,ab);var dl=(l1-l2)*SCAN_CONFIG.lWeight,da=a1-a2,db=b1-b2,dE=Math.sqrt(dl*dl+da*da+db*db);var[,s]=toHSV(r,g,b);if(tc==='W'){if(s>SCAN_CONFIG.whiteSatThreshold)dE+=s*SCAN_CONFIG.whiteSatPenalty;if(b1>SCAN_CONFIG.whiteBStarThreshold)dE+=b1*SCAN_CONFIG.whiteBStarPenalty;return dE;}if(s<SCAN_CONFIG.lowSatThreshold&&tc!=='W')return dE+SCAN_CONFIG.lowSatPenalty;return dE;}
   var anchors={},FA=['F','R','B','L','U','D'],CA=['R','B','O','G','W','Y'];
+  // 如果有校正過的顏色錨點，優先使用
+  var _useLearnedAnchors=false;
+  if(window._camCalibration&&window._camCalibration.anchors){
+    var la=window._camCalibration.anchors;
+    if(la.W&&la.R&&la.B&&la.O&&la.G&&la.Y){
+      anchors={W:la.W,R:la.R,B:la.B,O:la.O,G:la.G,Y:la.Y};
+      _useLearnedAnchors=true;
+    }
+  }
+  if(!_useLearnedAnchors){
   for(var i=0;i<6;i++){var face=FA[i],color=CA[i],cr=rawData[face][4];
     if(color==='W'){var[,cs2]=toHSV(cr[0],cr[1],cr[2]);
       if(cs2>SCAN_CONFIG.logoSatThreshold){var corners=[rawData[face][0],rawData[face][2],rawData[face][6],rawData[face][8]];var ca=[Math.round(corners.reduce((s,p)=>s+p[0],0)/4),Math.round(corners.reduce((s,p)=>s+p[1],0)/4),Math.round(corners.reduce((s,p)=>s+p[2],0)/4)];var[,cs3]=toHSV(ca[0],ca[1],ca[2]);var[,,cb3]=rgb2lab(ca[0],ca[1],ca[2]);
         if(cs3<0.15&&cb3<15){anchors.W=ca;}else{var bw=null,bs=Infinity;FA.forEach(f=>{rawData[f].forEach((rgb,idx)=>{if(idx===4)return;var[,ss]=toHSV(rgb[0],rgb[1],rgb[2]);var[ll,,bb]=rgb2lab(rgb[0],rgb[1],rgb[2]);var sc=ss*100+Math.abs(bb)+(100-ll)*0.5;if(sc<bs&&ss<0.1&&Math.abs(bb)<10&&ll>70){bs=sc;bw=rgb;}});});anchors.W=bw||[220,220,220];}continue;}}anchors[color]=cr;}
+  } // end if(!_useLearnedAnchors)
   all.forEach(s=>{if(s.pos===4)s.color=CC[s.face];});
   var nonC=all.filter(s=>s.pos!==4);
   nonC.forEach(s=>{s.dists={};Object.entries(anchors).forEach(([c,[ar,ag,ab]])=>{var[r,g,b]=s.rgb;s.dists[c]=smartDist(r,g,b,ar,ag,ab,c);});});
