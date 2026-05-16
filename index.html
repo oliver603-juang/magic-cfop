@@ -2333,6 +2333,7 @@ function doScanCapture(){
     // 前置鏡頭：CSS 鏡像但 video frame 未翻轉 → 取樣翻轉 column
     var sc=window._isFrontCamera?(2-c):c;
     const px=Math.round(sx+(sc+.5)*cs),py=Math.round(sy+(r+.5)*cs);
+    const half2=Math.round(cs*SCAN_CONFIG.sampleRadius);const ss2=half2*2+1;
     const d=tctx.getImageData(Math.max(0,px-half2),Math.max(0,py-half2),ss2,ss2);
     var pixels=[];for(let i=0;i<d.data.length;i+=4){pixels.push([d.data[i],d.data[i+1],d.data[i+2]]);}
     if(pixels.length>8){pixels.sort(function(a,b){return(a[0]+a[1]+a[2])-(b[0]+b[1]+b[2]);});var trim=Math.floor(pixels.length*SCAN_CONFIG.trimRatio);pixels=pixels.slice(trim,pixels.length-trim);}
