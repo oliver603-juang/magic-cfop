@@ -2330,9 +2330,9 @@ function doScanCapture(){
   const gs=Math.min(vw,vh)*0.82,cs=gs/3,sx=(vw-gs)/2,sy=(vh-gs)/2;
   let rgbs=[];
   for(let r=0;r<3;r++)for(let c=0;c<3;c++){
-    // 前置鏡頭：CSS 鏡像但 video frame 未翻轉 → 取樣翻轉 column
-    var sc=window._isFrontCamera?(2-c):c;
-    const px=Math.round(sx+(sc+.5)*cs),py=Math.round(sy+(r+.5)*cs);
+    // 前置鏡頭：魔方面朝鏡頭 → raw frame 已是正確的 Kociemba 順序
+    // CSS scaleX(-1) 只影響顯示，不影響 drawImage 取得的 raw data
+    const px=Math.round(sx+(c+.5)*cs),py=Math.round(sy+(r+.5)*cs);
     const half2=Math.round(cs*SCAN_CONFIG.sampleRadius);const ss2=half2*2+1;
     const d=tctx.getImageData(Math.max(0,px-half2),Math.max(0,py-half2),ss2,ss2);
     var pixels=[];for(let i=0;i<d.data.length;i+=4){pixels.push([d.data[i],d.data[i+1],d.data[i+2]]);}
@@ -4386,6 +4386,35 @@ function prevMove(){if(solveStep<=0)return;undoMoveOnState(solution[solveStep-1]
 
 // Wake lock
 (async function(){try{await navigator.wakeLock.request('screen');}catch(e){}})();
+
+// === 鍵盤快捷鍵（筆電鍵盤 / 藍牙鍵盤）===
+document.addEventListener('keydown',function(e){
+  // 不攔截輸入框內的按鍵
+  if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA'||e.target.isContentEditable)return;
+  switch(e.key){
+    case ' ':
+      // 空白鍵 = 拍照（掃描模式）
+      e.preventDefault();
+      if(typeof doScanCapture==='function'&&typeof scanIdx!=='undefined'&&scanIdx<6){
+        doScanCapture();
+      }
+      break;
+    case 'ArrowRight':
+      // 右鍵 = 下一步（解題模式）
+      e.preventDefault();
+      if(typeof nextMove==='function'&&typeof solveStep!=='undefined'){
+        nextMove();
+      }
+      break;
+    case 'ArrowLeft':
+      // 左鍵 = 上一步（解題模式）
+      e.preventDefault();
+      if(typeof prevMove==='function'&&typeof solveStep!=='undefined'&&solveStep>0){
+        prevMove();
+      }
+      break;
+  }
+});
 
 // ================================================================
 // ===== TRAINING COACH — OLL/PLL Recognition Training =====
