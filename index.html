@@ -2158,10 +2158,44 @@ async function startApp(){
   document.getElementById('startOv').classList.remove('show');
   vid=document.getElementById('vid');ov=document.getElementById('ov');octx=ov.getContext('2d');
   try{
-    const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280},height:{ideal:720}}});
+    // 智慧鏡頭選擇：手機優先後鏡頭、筆電跳過虛擬鏡頭
+    var camConstraints={video:{facingMode:'environment',width:{ideal:1280},height:{ideal:720}}};
+    try{
+      var allDevs=await navigator.mediaDevices.enumerateDevices();
+      var vidDevs=allDevs.filter(function(d){return d.kind==='videoinput';});
+      var hasLabels=vidDevs.some(function(d){return d.label&&d.label.length>0;});
+      if(hasLabels){
+        // 已授權：有 label 可做智慧選擇
+        // 1) 過濾虛擬鏡頭
+        var realCams=vidDevs.filter(function(d){var l=d.label.toLowerCase();return l.indexOf('virtual')===-1&&l.indexOf('mirametrix')===-1;});
+        if(realCams.length===0)realCams=vidDevs;
+        // 2) 優先後鏡頭
+        var rearCams=realCams.filter(function(d){var l=d.label.toLowerCase();return l.indexOf('back')!==-1||l.indexOf('rear')!==-1||l.indexOf('environment')!==-1;});
+        // 3) 排除前鏡頭
+        if(rearCams.length===0){var nf=realCams.filter(function(d){var l=d.label.toLowerCase();return l.indexOf('front')===-1&&l.indexOf('selfie')===-1;});if(nf.length>0)rearCams=nf;}
+        // 4) 最終選擇
+        var chosen=rearCams.length>0?rearCams[0]:realCams[0];
+        camConstraints={video:{deviceId:{exact:chosen.deviceId},width:{ideal:1280},height:{ideal:720}}};
+      }
+      // 未授權（無 label）：保持 facingMode:'environment'，讓瀏覽器自動選
+    }catch(enumErr){}
+    const s=await navigator.mediaDevices.getUserMedia(camConstraints);
     vid.srcObject=s;await vid.play();
-    // 強制開啟手電筒輔助光源（改善色塊辨識精度）
-    try{var track=s.getVideoTracks()[0];if(track){var caps=track.getCapabilities();if(caps&&caps.torch){await track.applyConstraints({advanced:[{torch:true}]});}}}catch(te){}
+    // 偵測前置鏡頭
+    var track=s.getVideoTracks()[0];
+    var settings=track.getSettings?track.getSettings():{};
+    var caps={};try{caps=track.getCapabilities?track.getCapabilities():{};}catch(e2){}
+    window._isFrontCamera=(settings.facingMode==='user');
+    if(!window._isFrontCamera&&caps.facingMode){
+      window._isFrontCamera=(caps.facingMode.length===1&&caps.facingMode[0]==='user');
+    }
+    if(window._isFrontCamera){
+      // 前置鏡頭：CSS 鏡像（讓使用者看到自然畫面，如照鏡子）
+      vid.style.transform='scaleX(-1)';
+      document.getElementById('ov').style.transform='scaleX(-1)';
+    }
+    // 手電筒（僅後鏡頭有 torch）
+    try{if(track&&!window._isFrontCamera&&caps.torch){await track.applyConstraints({advanced:[{torch:true}]});}}catch(te){}
     ov.width=vid.videoWidth||720;ov.height=vid.videoHeight||1280;
     mode='scan';scanIdx=0;
     document.getElementById('topBar').style.display='block';
@@ -2296,8 +2330,9 @@ function doScanCapture(){
   const gs=Math.min(vw,vh)*0.82,cs=gs/3,sx=(vw-gs)/2,sy=(vh-gs)/2;
   let rgbs=[];
   for(let r=0;r<3;r++)for(let c=0;c<3;c++){
-    const px=Math.round(sx+(c+.5)*cs),py=Math.round(sy+(r+.5)*cs);
-    const half2=Math.round(cs*SCAN_CONFIG.sampleRadius);const ss2=half2*2+1;
+    // 前置鏡頭：CSS 鏡像但 video frame 未翻轉 → 取樣翻轉 column
+    var sc=window._isFrontCamera?(2-c):c;
+    const px=Math.round(sx+(sc+.5)*cs),py=Math.round(sy+(r+.5)*cs);
     const d=tctx.getImageData(Math.max(0,px-half2),Math.max(0,py-half2),ss2,ss2);
     var pixels=[];for(let i=0;i<d.data.length;i+=4){pixels.push([d.data[i],d.data[i+1],d.data[i+2]]);}
     if(pixels.length>8){pixels.sort(function(a,b){return(a[0]+a[1]+a[2])-(b[0]+b[1]+b[2]);});var trim=Math.floor(pixels.length*SCAN_CONFIG.trimRatio);pixels=pixels.slice(trim,pixels.length-trim);}
