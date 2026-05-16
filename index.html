@@ -2386,7 +2386,9 @@ function _calibStep3(){
   h+='</div>';
   document.getElementById('title').textContent='✅ 校正完成';
   document.getElementById('info').innerHTML=h;
-  document.getElementById('btnRow').innerHTML='<button class="btn" onclick="location.reload()">🏠 回首頁</button><button class="btn" style="margin-top:6px;font-size:11px;color:#999;background:none" onclick="_clearCalibration()">🗑️ 清除校正</button>';
+  // 恢復手動輸入的正確 faceColors（可直接求解）
+  ['U','R','F','D','L','B'].forEach(function(f){faceColors[f]=manual[f].slice();});
+  document.getElementById('btnRow').innerHTML='<button class="btn" onclick="showModeSelect()">🚀 直接求解這個魔方</button><button class="btn" style="margin-top:6px;background:rgba(255,255,255,.1)" onclick="location.reload()">🏠 回首頁</button><button class="btn" style="margin-top:4px;font-size:11px;color:#999;background:none" onclick="_clearCalibration()">🗑️ 清除校正</button>';
 }
 
 function _clearCalibration(){
