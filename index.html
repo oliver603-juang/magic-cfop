@@ -68,6 +68,7 @@ canvas#ov{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:conta
  <button class="btn" style="margin-top:20px;font-size:18px;padding:16px 40px" onclick="startApp()">📸 開始掃描</button>
  <button class="btn btn-sm" style="margin-top:10px;background:rgba(255,255,255,.12);color:#ccc" onclick="startGallery()">🖼️ 從圖庫上傳 6 張照片</button>
  <button class="btn btn-sm" style="margin-top:6px;background:rgba(255,255,255,.08);color:#999;font-size:11px" onclick="startManual()">✏️ 手動輸入顏色</button>
+ <button class="btn btn-sm" style="margin-top:4px;background:rgba(255,180,0,.12);color:#FFD700;font-size:11px;border:1px solid rgba(255,180,0,.3)" onclick="startCalibration()">🔧 鏡頭校正</button>
  <input type="file" id="galleryInput" accept="image/*" multiple style="display:none" onchange="handleGalleryFiles(this.files)">
  <div id="brainStatus" style="margin-top:12px;font-size:11px;color:rgba(255,255,255,.3)">🧠 正在喚醒魔方大腦...</div>
 </div>
@@ -2222,10 +2223,117 @@ function startManual(){
   document.getElementById('btnRow').innerHTML='<button class="btn" onclick="finishManual()">🧩 選擇解法</button>';
 }
 function finishManual(){
-  // Check all 48 cells are filled
   var empty=0;['U','R','F','D','L','B'].forEach(f=>{faceColors[f].forEach((c,i)=>{if(i!==4&&c==='X')empty++;});});
   if(empty>0){document.getElementById('sub').innerHTML='<span style="color:#e55">還有 '+empty+' 格未填！</span>';return;}
   showModeSelect();
+}
+
+// ===== 鏡頭校正模式 =====
+// 原理：掃描 1 面 → 使用者手動輸入同一面的正確色塊 → 自動比對出鏡射規則
+// 之後所有掃描都套用這個校正
+window._camCalibration=null; // {perFace:{U:'LR',R:'LR',...}} or null
+try{var saved=localStorage.getItem('camCalib');if(saved)window._camCalibration=JSON.parse(saved);}catch(e){}
+
+function startCalibration(){
+  document.getElementById('startOv').classList.remove('show');
+  document.getElementById('startOv').style.display='none';
+  document.getElementById('topBar').style.display='block';
+  document.getElementById('botBar').style.display='block';
+  initSolver();
+  document.getElementById('title').textContent='🔧 鏡頭校正';
+  document.getElementById('info').innerHTML='<div style="font-size:12px;color:rgba(255,255,255,.7);line-height:1.6">步驟：<br>① 拿一個打亂的魔方<br>② 掃描 6 面（跟平常一樣）<br>③ 手動輸入同樣的 6 面<br>④ 系統自動比對出鏡射規則</div>';
+  document.getElementById('sub').textContent='';
+  document.getElementById('btnRow').innerHTML='<button class="btn" onclick="_calibStep1()">📸 開始掃描</button>';
+}
+
+async function _calibStep1(){
+  // 啟動相機，先暫時關掉所有校正
+  window._calibInProgress=true;
+  var oldCalib=window._camCalibration;
+  window._camCalibration=null;
+  try{await startApp();}catch(e){alert('相機錯誤: '+e.message);return;}
+  document.getElementById('title').textContent='🔧 校正 - 步驟① 掃描6面';
+  // 攔截 doClassify 完成後進入步驟②
+  var _origClassify2=doClassify;
+  window.doClassify=function(){
+    _origClassify2.apply(this,arguments);
+    setTimeout(function(){
+      if(faceColors&&faceColors.U&&faceColors.U[0]!=='X'){
+        window._calibScanResult={};
+        ['U','R','F','D','L','B'].forEach(function(f){window._calibScanResult[f]=faceColors[f].slice();});
+        window.doClassify=_origClassify2;
+        _calibStep2();
+      }
+    },500);
+  };
+}
+
+function _calibStep2(){
+  // 掃描完成，現在讓使用者手動輸入同一面
+  if(vid)vid.style.display='none';
+  document.getElementById('title').textContent='🔧 校正 - 步驟② 手動輸入';
+  document.getElementById('info').innerHTML='<div style="font-size:12px;color:rgba(255,255,255,.7)">現在請看著同一個魔方，手動填入正確的色塊。<br>完成後系統會自動比對出鏡射規則。</div>';
+  // 清空 faceColors 進入手動模式
+  ['U','R','F','D','L','B'].forEach(f=>{faceColors[f]=['X','X','X','X',CC[f],'X','X','X','X'];});
+  _paintIdx=0;_paintCounts={R:0,B:0,O:0,G:0,W:0,Y:0};
+  _updatePaintUI();
+  showEditableFaces();
+  document.getElementById('btnRow').innerHTML='<button class="btn" onclick="_calibStep3()">🧩 完成輸入，開始比對</button>';
+}
+
+function _calibStep3(){
+  // 檢查是否填完
+  var empty=0;['U','R','F','D','L','B'].forEach(f=>{faceColors[f].forEach((c,i)=>{if(i!==4&&c==='X')empty++;});});
+  if(empty>0){document.getElementById('sub').innerHTML='<span style="color:#e55">還有 '+empty+' 格未填！</span>';return;}
+  
+  var manual={};
+  ['U','R','F','D','L','B'].forEach(function(f){manual[f]=faceColors[f].slice();});
+  var scan=window._calibScanResult;
+  
+  // 逐面比對：嘗試 none/LR/UD/180，找匹配最高的
+  function matchCount(a,b){var c=0;for(var i=0;i<9;i++)if(a[i]===b[i])c++;return c;}
+  function mirrorLR(a){return[a[2],a[1],a[0],a[5],a[4],a[3],a[8],a[7],a[6]];}
+  function mirrorUD(a){return[a[6],a[7],a[8],a[3],a[4],a[5],a[0],a[1],a[2]];}
+  function rot180(a){return[a[8],a[7],a[6],a[5],a[4],a[3],a[2],a[1],a[0]];}
+  
+  var transforms=[
+    {name:'none',fn:function(a){return a.slice();}},
+    {name:'LR',fn:mirrorLR},
+    {name:'UD',fn:mirrorUD},
+    {name:'180',fn:rot180}
+  ];
+  
+  var calibResult={};
+  var report='';
+  ['U','R','F','D','L','B'].forEach(function(f){
+    var best={name:'none',score:0};
+    transforms.forEach(function(tr){
+      var transformed=tr.fn(scan[f]);
+      var score=matchCount(transformed,manual[f]);
+      if(score>best.score){best={name:tr.name,score:score};}
+    });
+    calibResult[f]=best.name;
+    report+=f+': '+best.name+' ('+best.score+'/9)\n';
+  });
+  
+  // 儲存校正結果
+  window._camCalibration={perFace:calibResult};
+  try{localStorage.setItem('camCalib',JSON.stringify(window._camCalibration));}catch(e){}
+  window._calibInProgress=false;
+  
+  // 顯示結果
+  var h='<div style="font-size:14px;font-weight:900;color:#0b0;margin-bottom:6px">✅ 校正完成！</div>';
+  h+='<div style="font-size:11px;color:rgba(255,255,255,.6);line-height:1.6">';
+  ['U','R','F','D','L','B'].forEach(function(f){
+    var cn={U:'上',R:'右',F:'前',D:'下',L:'左',B:'後'};
+    var trName={none:'不需翻轉',LR:'←→ 左右鏡射',UD:'↕ 上下鏡射','180':'↻ 旋轉180°'};
+    h+=cn[f]+'('+f+'): '+(trName[calibResult[f]]||calibResult[f])+'<br>';
+  });
+  h+='</div>';
+  h+='<div style="font-size:10px;color:rgba(255,255,255,.35);margin-top:4px">已儲存，下次掃描自動套用。</div>';
+  document.getElementById('title').textContent='✅ 鏡頭校正完成';
+  document.getElementById('info').innerHTML=h;
+  document.getElementById('btnRow').innerHTML='<button class="btn" onclick="location.reload()">🏠 回首頁開始使用</button><button class="btn" style="margin-top:6px;font-size:11px;color:#999;background:none" onclick="localStorage.removeItem(\'camCalib\');window._camCalibration=null;location.reload()">🗑️ 清除校正</button>';
 }
 
 // ===== SOLVER WORKER (Kociemba) =====
@@ -2332,9 +2440,20 @@ function doScanCapture(){
   const gs=Math.min(vw,vh)*0.41,cs=gs/3,sx=(vw-gs)/2,sy=(vh-gs)/2;
   let rgbs=[];
   for(let r=0;r<3;r++)for(let c=0;c<3;c++){
-    // 前置鏡頭修正：U/F/R/L/D 左右翻轉，B 上下翻轉
+    // 鏡頭校正修正（優先使用校正結果，fallback 到預設規則）
     var sr=r,sc=c;
-    if(window._isFrontCamera){if(SCAN_SEQ[scanIdx].f==='B'){sr=2-r;}else{sc=2-c;}}
+    var curFace=SCAN_SEQ[scanIdx].f;
+    if(window._isFrontCamera && !window._calibInProgress){
+      if(window._camCalibration && window._camCalibration.perFace){
+        var rule=window._camCalibration.perFace[curFace]||'none';
+        if(rule==='LR'){sc=2-c;}
+        else if(rule==='UD'){sr=2-r;}
+        else if(rule==='180'){sc=2-c;sr=2-r;}
+      } else {
+        // 預設：5面左右翻，B面上下翻
+        if(curFace==='B'){sr=2-r;}else{sc=2-c;}
+      }
+    }
     const px=Math.round(sx+(sc+.5)*cs),py=Math.round(sy+(sr+.5)*cs);
     const half2=Math.round(cs*SCAN_CONFIG.sampleRadius);const ss2=half2*2+1;
     const d=tctx.getImageData(Math.max(0,px-half2),Math.max(0,py-half2),ss2,ss2);
