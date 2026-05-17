@@ -2481,10 +2481,11 @@ function showScanUI(){
   document.getElementById('btnRow').innerHTML='<button class="btn" onclick="doScanCapture()">📸 拍照</button>';
   drawGuideGrid();
 }
+function _getGridRatio(){return window._isFrontCamera?0.41:0.90;}
 function drawGuideGrid(){
   if(!ov||!ov.width)return;
   const vw=ov.width,vh=ov.height;octx.clearRect(0,0,vw,vh);
-  const gs=Math.min(vw,vh)*0.41,cs=gs/3,sx=(vw-gs)/2,sy=(vh-gs)/2;
+  const gs=Math.min(vw,vh)*_getGridRatio(),cs=gs/3,sx=(vw-gs)/2,sy=(vh-gs)/2;
   // 黑色遮罩（輔助框以外）
   octx.fillStyle='rgba(0,0,0,.7)';
   octx.fillRect(0,0,vw,sy);octx.fillRect(0,sy+gs,vw,vh-sy-gs);octx.fillRect(0,sy,sx,gs);octx.fillRect(sx+gs,sy,vw-sx-gs,gs);
@@ -2500,7 +2501,7 @@ function doScanCapture(){
   const vw=vid.videoWidth,vh=vid.videoHeight;
   const tc=document.createElement('canvas');tc.width=vw;tc.height=vh;
   const tctx=tc.getContext('2d');tctx.drawImage(vid,0,0,vw,vh);
-  const gs=Math.min(vw,vh)*0.41,cs=gs/3,sx=(vw-gs)/2,sy=(vh-gs)/2;
+  const gs=Math.min(vw,vh)*_getGridRatio(),cs=gs/3,sx=(vw-gs)/2,sy=(vh-gs)/2;
   let rgbs=[];
   for(let r=0;r<3;r++)for(let c=0;c<3;c++){
     // 鏡頭校正修正（優先使用校正結果，fallback 到預設規則）
