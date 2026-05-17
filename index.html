@@ -37,6 +37,9 @@ canvas#ov{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:conta
 @keyframes confetti-fall{0%{transform:translateY(0) rotate(0deg);opacity:1}100%{transform:translateY(100vh) rotate(720deg);opacity:0}}
 @keyframes x2pulse{0%,100%{box-shadow:0 0 8px #FF1744}50%{box-shadow:0 0 20px #FF1744}}
 </style>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 </head>
 <body>
 <div class="wrap">
@@ -70,6 +73,7 @@ canvas#ov{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:conta
  <button class="btn btn-sm" style="margin-top:10px;background:rgba(255,255,255,.12);color:#ccc" onclick="startGallery()">🖼️ 從圖庫上傳 6 張照片</button>
  <button class="btn btn-sm" style="margin-top:6px;background:rgba(255,255,255,.08);color:#999;font-size:11px" onclick="startManual()">✏️ 手動輸入顏色</button>
  <button class="btn btn-sm" style="margin-top:4px;background:rgba(255,180,0,.12);color:#FFD700;font-size:11px;border:1px solid rgba(255,180,0,.3)" onclick="startCalibration()">🔧 鏡頭校正</button>
+ <button class="btn btn-sm" style="margin-top:4px;background:rgba(0,180,255,.1);color:#00D2FF;font-size:10px" onclick="_showSyncUI()">☁️ 雲端同步</button>
  <input type="file" id="galleryInput" accept="image/*" multiple style="display:none" onchange="handleGalleryFiles(this.files)">
  <div id="brainStatus" style="margin-top:12px;font-size:11px;color:rgba(255,255,255,.3)">🧠 正在喚醒魔方大腦...</div>
 </div>
@@ -2368,9 +2372,104 @@ function _calibStep3(){
 
 function _clearCalibration(){
   localStorage.removeItem('camCalib_desktop');localStorage.removeItem('camCalib_mobile');localStorage.removeItem('camCalib_tablet');localStorage.removeItem('cubeProfiles');
-  window._camCalibration=null;window._cubeProfiles=null;location.reload();
+  window._camCalibration=null;window._cubeProfiles=null;
+  if(window._fb&&window._fb.uid)_fbDelete();
+  location.reload();
 }
 
+// ===== Firebase 雲端同步 =====
+window._fb={uid:null,db:null,ready:false};
+(function(){
+  try{
+    firebase.initializeApp({
+      apiKey:"AIzaSyAdu9s_EkPr0obWjK6l6uLS-Oca3Lu2uaw",
+      authDomain:"screw-inventory.firebaseapp.com",
+      projectId:"screw-inventory"
+    });
+    window._fb.db=firebase.firestore();
+    // 匿名登入
+    firebase.auth().signInAnonymously().then(function(cred){
+      window._fb.uid=cred.user.uid;
+      window._fb.ready=true;
+      console.log('Firebase ready: '+window._fb.uid);
+      // 自動從雲端拉取（如果本地沒有校正資料）
+      if(!window._camCalibration&&!window._cubeProfiles){_fbPull();}
+    }).catch(function(e){console.log('Firebase auth failed:',e.message);});
+  }catch(e){console.log('Firebase init failed:',e.message);}
+})();
+
+function _fbPush(){
+  if(!window._fb.ready||!window._fb.uid)return;
+  var dev=_getDeviceKey();
+  var data={
+    updatedAt:firebase.firestore.FieldValue.serverTimestamp(),
+    device:dev
+  };
+  if(window._camCalibration)data['calib_'+dev]=window._camCalibration;
+  if(window._cubeProfiles)data.cubeProfiles=window._cubeProfiles;
+  window._fb.db.collection('magic-cfop-users').doc(window._fb.uid).set(data,{merge:true}).then(function(){
+    console.log('Firebase push OK');
+  }).catch(function(e){console.log('Firebase push failed:',e.message);});
+}
+
+function _fbPull(){
+  if(!window._fb.ready||!window._fb.uid)return;
+  window._fb.db.collection('magic-cfop-users').doc(window._fb.uid).get().then(function(doc){
+    if(!doc.exists)return;
+    var data=doc.data();
+    var dev=_getDeviceKey();
+    // 拉取裝置校正
+    if(data['calib_'+dev]&&!window._camCalibration){
+      window._camCalibration=data['calib_'+dev];
+      localStorage.setItem('camCalib_'+dev,JSON.stringify(data['calib_'+dev]));
+    }
+    // 拉取品牌檔案
+    if(data.cubeProfiles&&!window._cubeProfiles){
+      window._cubeProfiles=data.cubeProfiles;
+      localStorage.setItem('cubeProfiles',JSON.stringify(data.cubeProfiles));
+    }
+    console.log('Firebase pull OK');
+    // 更新首頁顯示
+    setTimeout(function(){
+      var el=document.getElementById('brandStatus');
+      if(el){
+        var active=_getActiveCube();
+        if(active)el.innerHTML='<span style="color:#0b0">🧊 '+active+'</span> <span style="color:rgba(255,255,255,.3)">('+_getDeviceKey()+', ☁️ 已同步)</span>';
+      }
+    },200);
+  }).catch(function(e){console.log('Firebase pull failed:',e.message);});
+}
+
+function _fbDelete(){
+  if(!window._fb.ready||!window._fb.uid)return;
+  window._fb.db.collection('magic-cfop-users').doc(window._fb.uid).delete().catch(function(e){});
+}
+
+// 在每次儲存校正時也推送到 Firebase
+var _origSaveCalib=_saveCalibration;
+window._saveCalibration=function(calib){_origSaveCalib(calib);setTimeout(_fbPush,500);};
+var _origSaveProf=_saveProfiles;
+window._saveProfiles=function(){_origSaveProf();setTimeout(_fbPush,500);};
+
+
+function _showSyncUI(){
+  var el=document.getElementById('startOv');
+  var h='<div style="font-size:18px;font-weight:900;color:#00D2FF;margin-bottom:12px">☁️ 雲端同步</div>';
+  h+='<div style="font-size:12px;color:rgba(255,255,255,.6);line-height:1.6;max-width:300px;text-align:center">';
+  if(window._fb.ready){
+    h+='<span style="color:#0b0">✅ 已連線</span><br>裝置ID: '+window._fb.uid.substring(0,8)+'...<br>裝置類型: '+_getDeviceKey()+'<br><br>';
+    var list=_getCubeList();
+    if(list.length>0){h+='已校正品牌: '+list.join(', ')+'<br><br>';}
+    h+='</div>';
+    h+='<button class="btn" style="background:rgba(0,180,255,.3);color:#fff;font-size:13px;padding:10px 24px" onclick="_fbPush();alert(\'已上傳！\')">⬆️ 上傳到雲端</button>';
+    h+='<button class="btn" style="margin-top:6px;background:rgba(0,180,255,.15);color:#ccc;font-size:12px;padding:8px 20px" onclick="_fbPull();setTimeout(function(){location.reload();},1000)">⬇️ 從雲端下載</button>';
+  } else {
+    h+='<span style="color:#FF6B6B">⏳ Firebase 連線中...</span><br>請稍候或檢查網路<br><br>';
+    h+='</div>';
+  }
+  h+='<button class="btn" style="margin-top:12px;font-size:11px;color:#999;background:none" onclick="location.reload()">↩️ 返回</button>';
+  el.innerHTML=h;
+}
 
 // ===== SOLVER WORKER (Kociemba) =====
 function initSolver(){
