@@ -2219,6 +2219,7 @@ function startManual(){
   document.getElementById('topBar').style.display='block';
   document.getElementById('botBar').style.display='block';
   document.getElementById('title').textContent='✏️ 手動輸入';
+  document.getElementById('sub').innerHTML='<span style="color:#FFD700;font-size:10px">⚠️ B面(後/橘)：水平轉180°看，白色保持朝上</span>';
   _updatePaintUI();
   showEditableFaces();
   document.getElementById('btnRow').innerHTML='<button class="btn" onclick="finishManual()">🧩 選擇解法</button>';
@@ -2313,7 +2314,7 @@ async function _calibStep1(){
 function _calibStep2(){
   if(vid)vid.style.display='none';
   document.getElementById('title').textContent='\u{1F527} \u6821\u6B63\u2461 \u624B\u52D5\u8F38\u5165';
-  document.getElementById('info').innerHTML='<div style="font-size:12px;color:rgba(255,255,255,.7)">\u770B\u8457\u540C\u4E00\u500B\u9B54\u65B9\uFF0C\u624B\u52D5\u586B\u5165\u6B63\u78BA\u8272\u584A\u3002</div>';
+  document.getElementById('info').innerHTML='<div style="font-size:12px;color:rgba(255,255,255,.7);line-height:1.6">\u770B\u8457\u540C\u4E00\u500B\u9B54\u65B9\uFF0C\u624B\u52D5\u586B\u5165\u6B63\u78BA\u8272\u584A\u3002<br><br><span style="color:#FFD700">\u26A0\uFE0F B\u9762\uFF08\u5F8C\u9762/\u6A58\uFF09\u586B\u8272\u65B9\u5F0F\uFF1A</span><br>\u8ACB<b>\u6C34\u5E73\u8F49 180\u00B0</b>\u770B B \u9762\uFF08\u767D\u8272\u4FDD\u6301\u671D\u4E0A\uFF09<br>\u4E0D\u8981\u5F80\u524D/\u5F80\u5F8C\u7FFB\uFF01</div>';
   ['U','R','F','D','L','B'].forEach(f=>{faceColors[f]=['X','X','X','X',CC[f],'X','X','X','X'];});
   _paintIdx=0;_paintCounts={R:0,B:0,O:0,G:0,W:0,Y:0};_updatePaintUI();showEditableFaces();
   document.getElementById('btnRow').innerHTML='<button class="btn" onclick="_calibStep2b()">\u{1F9E9} \u5B8C\u6210\uFF0C\u4E0B\u4E00\u6B65</button>';
@@ -2343,7 +2344,7 @@ function _calibStep3(){
   function rot180(a){return[a[8],a[7],a[6],a[5],a[4],a[3],a[2],a[1],a[0]];}
   var transforms=[{name:'none',fn:function(a){return a.slice();}},{name:'LR',fn:mirrorLR},{name:'UD',fn:mirrorUD},{name:'180',fn:rot180}];
   var orientResult={};
-  ['U','R','F','D','L','B'].forEach(function(f){var best={name:'none',score:0};transforms.forEach(function(tr){var score=matchCount(tr.fn(scan[f]),manual[f]);if(score>best.score)best={name:tr.name,score:score};});orientResult[f]=best;});
+  ['U','R','F','D','L','B'].forEach(function(f){var best={name:'none',score:0};transforms.forEach(function(tr){var score=matchCount(tr.fn(scan[f]),manual[f]);if(score>best.score)best={name:tr.name,score:score};});if(f==='B'&&best.score<7&&best.name==='none'){best={name:'UD',score:best.score};}orientResult[f]=best;});
   var rawRGB=window._calibRawData;var colorSamples={W:[],R:[],B:[],O:[],G:[],Y:[]};
   ['U','R','F','D','L','B'].forEach(function(f){if(!rawRGB[f])return;var bestTr=transforms.find(function(t){return t.name===orientResult[f].name;});
     for(var i=0;i<9;i++){var mc=manual[f][i];var ri=i;if(bestTr&&bestTr.name==='LR')ri=[2,1,0,5,4,3,8,7,6][i];else if(bestTr&&bestTr.name==='UD')ri=[6,7,8,3,4,5,0,1,2][i];else if(bestTr&&bestTr.name==='180')ri=[8,7,6,5,4,3,2,1,0][i];if(rawRGB[f][ri]&&mc&&mc!=='X')colorSamples[mc].push(rawRGB[f][ri]);}});
@@ -2489,10 +2490,12 @@ function doScanCapture(){
         else if(rule==='UD'){sr=2-r;}
         else if(rule==='180'){sc=2-c;sr=2-r;}
       } else if(window._isFrontCamera){
-        // 無校正 + 前置鏡頭 → 預設規則
+        // 無校正 + 前置鏡頭 → 預設：5面LR + B面UD
         if(curFace==='B'){sr=2-r;}else{sc=2-c;}
+      } else {
+        // 無校正 + 後鏡頭 → B面仍需上下翻（翻轉魔方看B面時上下顛倒）
+        if(curFace==='B'){sr=2-r;}
       }
-      // 無校正 + 後鏡頭 → 不修正
     }
     const px=Math.round(sx+(sc+.5)*cs),py=Math.round(sy+(sr+.5)*cs);
     const half2=Math.round(cs*SCAN_CONFIG.sampleRadius);const ss2=half2*2+1;
