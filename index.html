@@ -65,7 +65,8 @@ canvas#ov{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:conta
  <div style="font-size:24px;font-weight:900;color:#FFD700">魔方小老師 v3</div>
  <div style="font-size:15px;font-weight:800;color:#00D2FF;margin-top:2px">Kociemba + CFOP 雙模式</div>
  <div style="font-size:13px;color:rgba(255,255,255,.5);margin-top:10px;max-width:280px;text-align:center;line-height:1.6">📸 拍攝6面 → 選擇解法模式<br>🚀 最速解 (Kociemba ~20步)<br>📚 學習解 (CFOP ~72步)</div>
- <button class="btn" style="margin-top:20px;font-size:18px;padding:16px 40px" onclick="startApp()">📸 開始掃描</button>
+ <button class="btn" style="margin-top:20px;font-size:18px;padding:16px 40px" onclick="_startScanWithBrandSelect()">📸 開始掃描</button>
+ <div id="brandStatus" style="font-size:11px;margin-top:4px;min-height:16px"></div>
  <button class="btn btn-sm" style="margin-top:10px;background:rgba(255,255,255,.12);color:#ccc" onclick="startGallery()">🖼️ 從圖庫上傳 6 張照片</button>
  <button class="btn btn-sm" style="margin-top:6px;background:rgba(255,255,255,.08);color:#999;font-size:11px" onclick="startManual()">✏️ 手動輸入顏色</button>
  <button class="btn btn-sm" style="margin-top:4px;background:rgba(255,180,0,.12);color:#FFD700;font-size:11px;border:1px solid rgba(255,180,0,.3)" onclick="startCalibration()">🔧 鏡頭校正</button>
@@ -2231,58 +2232,79 @@ function finishManual(){
 // ===== 鏡頭校正模式 =====
 // 校正內容：① 六面方位鏡射 ② 色塊分類參數（anchor RGB）
 // 按裝置分別儲存（筆電/手機各自的 profile）
+// ===== 多品牌校正系統 =====
 window._camCalibration=null;
+window._cubeProfiles=null;
 try{
   var devKey=_getDeviceKey();
   var saved=localStorage.getItem('camCalib_'+devKey);
   if(saved)window._camCalibration=JSON.parse(saved);
+  var profiles=localStorage.getItem('cubeProfiles');
+  if(profiles)window._cubeProfiles=JSON.parse(profiles);
 }catch(e){}
 
 function _getDeviceKey(){
-  // 筆電 vs 手機：用螢幕寬度 + 是否有觸控粗略區分
-  var w=screen.width||0;
-  var touch='ontouchstart' in window;
-  if(w>1000&&!touch)return 'desktop';
-  if(w>1000&&touch)return 'tablet';
-  return 'mobile';
+  var w=screen.width||0;var touch='ontouchstart' in window;
+  if(w>1000&&!touch)return 'desktop';if(w>1000&&touch)return 'tablet';return 'mobile';
 }
+function _saveCalibration(calib){window._camCalibration=calib;try{localStorage.setItem('camCalib_'+_getDeviceKey(),JSON.stringify(calib));}catch(e){}}
+function _saveProfiles(){try{localStorage.setItem('cubeProfiles',JSON.stringify(window._cubeProfiles));}catch(e){}}
+function _getCubeList(){if(!window._cubeProfiles||!window._cubeProfiles.cubes)return[];return Object.keys(window._cubeProfiles.cubes);}
+function _getActiveCube(){if(!window._cubeProfiles)return null;return window._cubeProfiles.activeCube||null;}
+function _setActiveCube(name){
+  if(!window._cubeProfiles)window._cubeProfiles={cubes:{},activeCube:null};
+  window._cubeProfiles.activeCube=name;
+  if(name&&window._cubeProfiles.cubes[name]&&window._camCalibration){window._camCalibration.anchors=window._cubeProfiles.cubes[name].anchors;_saveCalibration(window._camCalibration);}
+  _saveProfiles();
+}
+setTimeout(function(){
+  var el=document.getElementById('brandStatus');if(!el)return;
+  var active=_getActiveCube();var dev=_getDeviceKey();var hasCalib=!!(window._camCalibration&&window._camCalibration.perFace);
+  if(active&&hasCalib)el.innerHTML='<span style="color:#0b0">\u{1F9CA} '+active+'</span> <span style="color:rgba(255,255,255,.3)">('+dev+')</span>';
+  else if(hasCalib)el.innerHTML='<span style="color:#FFD700">\u{1F527} \u5DF2\u6821\u6B63 ('+dev+')</span>';
+  else el.innerHTML='<span style="color:rgba(255,255,255,.3)">\u5EFA\u8B70\u5148\u505A\u93E1\u982D\u6821\u6B63 \u2192</span>';
+},100);
 
-function _saveCalibration(calib){
-  window._camCalibration=calib;
-  try{localStorage.setItem('camCalib_'+_getDeviceKey(),JSON.stringify(calib));}catch(e){}
+function _startScanWithBrandSelect(){
+  var list=_getCubeList();var hasCalib=!!(window._camCalibration&&window._camCalibration.perFace);
+  if(!hasCalib&&list.length===0){startCalibration();return;}
+  if(list.length===0){startApp();return;}
+  if(list.length===1){_setActiveCube(list[0]);startApp();return;}
+  var el=document.getElementById('startOv');var active=_getActiveCube();
+  var h='<div style="font-size:18px;font-weight:900;color:#FFD700;margin-bottom:12px">\u{1F9CA} \u9078\u64C7\u9B54\u65B9</div>';
+  list.forEach(function(name){
+    var isA=name===active;var cube=window._cubeProfiles.cubes[name];var dots='';
+    if(cube.anchors){['R','O','B','G','W','Y'].forEach(function(c){if(cube.anchors[c])dots+='<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:rgb('+cube.anchors[c].join(',')+');margin:0 1px"></span>';});}
+    h+='<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;margin:4px auto;max-width:300px;background:'+(isA?'rgba(0,210,255,.15)':'rgba(255,255,255,.05)')+';border:1px solid '+(isA?'rgba(0,210,255,.4)':'rgba(255,255,255,.1)')+';border-radius:8px;cursor:pointer" onclick="_selectCubeAndScan(\''+name.replace(/'/g,"\\'")+'\')">';
+    h+='<span style="font-size:16px">'+(isA?'\u2705':'\u2B1C')+'</span><div><div style="font-size:13px;color:#fff">'+name+'</div><div style="margin-top:2px">'+dots+'</div></div></div>';
+  });
+  h+='<button class="btn" style="margin-top:8px;font-size:12px;background:rgba(255,255,255,.08);color:#ccc;padding:8px 16px" onclick="_selectCubeAndScan(null)">\u4E0D\u6307\u5B9A\u54C1\u724C</button>';
+  h+='<button class="btn" style="margin-top:6px;font-size:11px;color:#999;background:none" onclick="location.reload()">\u21A9\uFE0F \u53D6\u6D88</button>';
+  el.innerHTML=h;
 }
+window._selectCubeAndScan=function(name){_setActiveCube(name);startApp();};
 
 function startCalibration(){
-  document.getElementById('startOv').classList.remove('show');
-  document.getElementById('startOv').style.display='none';
-  document.getElementById('topBar').style.display='block';
-  document.getElementById('botBar').style.display='block';
-  initSolver();
-  var devKey=_getDeviceKey();
-  document.getElementById('title').textContent='🔧 鏡頭校正';
-  document.getElementById('info').innerHTML='<div style="font-size:12px;color:rgba(255,255,255,.7);line-height:1.6">裝置類型：<b>'+devKey+'</b><br>步驟：<br>① 拿一個打亂的魔方<br>② 掃描 6 面<br>③ 手動輸入同樣的 6 面<br>④ 自動比對方位+學習顏色</div>';
+  document.getElementById('startOv').classList.remove('show');document.getElementById('startOv').style.display='none';
+  document.getElementById('topBar').style.display='block';document.getElementById('botBar').style.display='block';initSolver();
+  document.getElementById('title').textContent='\u{1F527} \u93E1\u982D\u6821\u6B63';
+  document.getElementById('info').innerHTML='<div style="font-size:12px;color:rgba(255,255,255,.7);line-height:1.6">\u88DD\u7F6E\uFF1A<b>'+_getDeviceKey()+'</b><br>\u2460 \u6383\u63CF 6 \u9762<br>\u2461 \u624B\u52D5\u8F38\u5165\u540C\u6A23\u7684 6 \u9762<br>\u2462 \u8F38\u5165\u9B54\u65B9\u54C1\u724C<br>\u2463 \u81EA\u52D5\u6821\u6B63\u65B9\u4F4D+\u984F\u8272</div>';
   document.getElementById('sub').textContent='';
-  document.getElementById('btnRow').innerHTML='<button class="btn" onclick="_calibStep1()">📸 開始掃描</button>';
+  document.getElementById('btnRow').innerHTML='<button class="btn" onclick="_calibStep1()">\u{1F4F8} \u958B\u59CB\u6383\u63CF</button>';
 }
 
 async function _calibStep1(){
-  window._calibInProgress=true;
-  var oldCalib=window._camCalibration;
-  window._camCalibration=null; // 掃描時不做任何校正
-  try{await startApp();}catch(e){alert('相機錯誤: '+e.message);return;}
-  document.getElementById('title').textContent='🔧 校正 - 步驟① 掃描6面';
-  var _origClassify2=doClassify;
+  window._calibInProgress=true;window._camCalibration=null;
+  try{await startApp();}catch(e){alert('\u76F8\u6A5F\u932F\u8AA4: '+e.message);return;}
+  document.getElementById('title').textContent='\u{1F527} \u6821\u6B63\u2460 \u6383\u63CF6\u9762';
+  var _origC=doClassify;
   window.doClassify=function(){
-    // 儲存 raw RGB（分類前的原始資料）
-    window._calibRawData={};
-    ['U','R','F','D','L','B'].forEach(function(f){if(rawData[f])window._calibRawData[f]=rawData[f].slice();});
-    _origClassify2.apply(this,arguments);
+    window._calibRawData={};['U','R','F','D','L','B'].forEach(function(f){if(rawData[f])window._calibRawData[f]=rawData[f].slice();});
+    _origC.apply(this,arguments);
     setTimeout(function(){
       if(faceColors&&faceColors.U&&faceColors.U[0]!=='X'){
-        window._calibScanResult={};
-        ['U','R','F','D','L','B'].forEach(function(f){window._calibScanResult[f]=faceColors[f].slice();});
-        window.doClassify=_origClassify2;
-        _calibStep2();
+        window._calibScanResult={};['U','R','F','D','L','B'].forEach(function(f){window._calibScanResult[f]=faceColors[f].slice();});
+        window.doClassify=_origC;_calibStep2();
       }
     },500);
   };
@@ -2290,114 +2312,64 @@ async function _calibStep1(){
 
 function _calibStep2(){
   if(vid)vid.style.display='none';
-  document.getElementById('title').textContent='🔧 校正 - 步驟② 手動輸入';
-  document.getElementById('info').innerHTML='<div style="font-size:12px;color:rgba(255,255,255,.7)">看著同一個魔方，手動填入正確色塊。</div>';
+  document.getElementById('title').textContent='\u{1F527} \u6821\u6B63\u2461 \u624B\u52D5\u8F38\u5165';
+  document.getElementById('info').innerHTML='<div style="font-size:12px;color:rgba(255,255,255,.7)">\u770B\u8457\u540C\u4E00\u500B\u9B54\u65B9\uFF0C\u624B\u52D5\u586B\u5165\u6B63\u78BA\u8272\u584A\u3002</div>';
   ['U','R','F','D','L','B'].forEach(f=>{faceColors[f]=['X','X','X','X',CC[f],'X','X','X','X'];});
-  _paintIdx=0;_paintCounts={R:0,B:0,O:0,G:0,W:0,Y:0};
-  _updatePaintUI();
-  showEditableFaces();
-  document.getElementById('btnRow').innerHTML='<button class="btn" onclick="_calibStep3()">🧩 完成，開始比對</button>';
+  _paintIdx=0;_paintCounts={R:0,B:0,O:0,G:0,W:0,Y:0};_updatePaintUI();showEditableFaces();
+  document.getElementById('btnRow').innerHTML='<button class="btn" onclick="_calibStep2b()">\u{1F9E9} \u5B8C\u6210\uFF0C\u4E0B\u4E00\u6B65</button>';
+}
+
+function _calibStep2b(){
+  var empty=0;['U','R','F','D','L','B'].forEach(f=>{faceColors[f].forEach((c,i)=>{if(i!==4&&c==='X')empty++;});});
+  if(empty>0){document.getElementById('sub').innerHTML='<span style="color:#e55">\u9084\u6709 '+empty+' \u683C\u672A\u586B\uFF01</span>';return;}
+  document.getElementById('title').textContent='\u{1F527} \u6821\u6B63\u2462 \u9B54\u65B9\u54C1\u724C';
+  var list=_getCubeList();
+  var h='<div style="font-size:12px;color:rgba(255,255,255,.7);margin-bottom:8px">\u9019\u500B\u9B54\u65B9\u53EB\u4EC0\u9EBC\u540D\u5B57\uFF1F</div>';
+  if(list.length>0){h+='<div style="margin-bottom:8px">';list.forEach(function(name){h+='<button style="display:block;width:90%;max-width:280px;margin:3px auto;text-align:left;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:6px;color:#fff;padding:8px 12px;font-size:12px;cursor:pointer" onclick="document.getElementById(\'cubNameInput\').value=\''+name.replace(/'/g,"\\'")+'\'"><span>\u{1F9CA}</span> '+name+'</button>';});h+='<div style="font-size:10px;color:rgba(255,255,255,.3);margin:4px 0">\u6216\u8F38\u5165\u65B0\u540D\u7A31\uFF1A</div></div>';}
+  h+='<input id="cubNameInput" type="text" placeholder="\u4F8B\uFF1AGAN 356M" style="width:80%;max-width:280px;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.1);color:#fff;font-size:14px;text-align:center;outline:none">';
+  document.getElementById('info').innerHTML=h;document.getElementById('mgrid').style.display='none';
+  document.getElementById('btnRow').innerHTML='<button class="btn" onclick="_calibStep3()">\u2705 \u5B8C\u6210\u6821\u6B63</button>';
+  setTimeout(function(){var inp=document.getElementById('cubNameInput');if(inp)inp.focus();},300);
 }
 
 function _calibStep3(){
-  var empty=0;['U','R','F','D','L','B'].forEach(f=>{faceColors[f].forEach((c,i)=>{if(i!==4&&c==='X')empty++;});});
-  if(empty>0){document.getElementById('sub').innerHTML='<span style="color:#e55">還有 '+empty+' 格未填！</span>';return;}
-  
-  var manual={};
-  ['U','R','F','D','L','B'].forEach(function(f){manual[f]=faceColors[f].slice();});
+  var cubeName=(document.getElementById('cubNameInput').value||'').trim();
+  if(!cubeName){document.getElementById('sub').innerHTML='<span style="color:#e55">\u8ACB\u8F38\u5165\u9B54\u65B9\u540D\u7A31\uFF01</span>';return;}
+  var manual={};['U','R','F','D','L','B'].forEach(function(f){manual[f]=faceColors[f].slice();});
   var scan=window._calibScanResult;
-  
-  // === ① 方位比對 ===
   function matchCount(a,b){var c=0;for(var i=0;i<9;i++)if(a[i]===b[i])c++;return c;}
   function mirrorLR(a){return[a[2],a[1],a[0],a[5],a[4],a[3],a[8],a[7],a[6]];}
   function mirrorUD(a){return[a[6],a[7],a[8],a[3],a[4],a[5],a[0],a[1],a[2]];}
   function rot180(a){return[a[8],a[7],a[6],a[5],a[4],a[3],a[2],a[1],a[0]];}
-  var transforms=[
-    {name:'none',fn:function(a){return a.slice();}},
-    {name:'LR',fn:mirrorLR},{name:'UD',fn:mirrorUD},{name:'180',fn:rot180}
-  ];
-  
+  var transforms=[{name:'none',fn:function(a){return a.slice();}},{name:'LR',fn:mirrorLR},{name:'UD',fn:mirrorUD},{name:'180',fn:rot180}];
   var orientResult={};
-  ['U','R','F','D','L','B'].forEach(function(f){
-    var best={name:'none',score:0};
-    transforms.forEach(function(tr){
-      var score=matchCount(tr.fn(scan[f]),manual[f]);
-      if(score>best.score)best={name:tr.name,score:score};
-    });
-    orientResult[f]=best;
-  });
-  
-  // === ② 色塊分類參數學習 ===
-  // 用手動輸入的顏色標籤 + 掃描的 raw RGB，計算每色的平均 anchor RGB
-  var rawRGB=window._calibRawData;
-  var colorSamples={W:[],R:[],B:[],O:[],G:[],Y:[]};
-  ['U','R','F','D','L','B'].forEach(function(f){
-    if(!rawRGB[f])return;
-    var bestTr=transforms.find(function(t){return t.name===orientResult[f].name;});
-    // 用校正後的索引對應手動標籤
-    for(var i=0;i<9;i++){
-      var manualColor=manual[f][i];
-      // 反算校正前的 raw 索引
-      var rawIdx=i;
-      if(bestTr&&bestTr.name==='LR'){rawIdx=[2,1,0,5,4,3,8,7,6][i];}
-      else if(bestTr&&bestTr.name==='UD'){rawIdx=[6,7,8,3,4,5,0,1,2][i];}
-      else if(bestTr&&bestTr.name==='180'){rawIdx=[8,7,6,5,4,3,2,1,0][i];}
-      if(rawRGB[f][rawIdx]&&manualColor&&manualColor!=='X'){
-        colorSamples[manualColor].push(rawRGB[f][rawIdx]);
-      }
-    }
-  });
-  
-  // 計算每色的平均 RGB
-  var learnedAnchors={};
-  Object.keys(colorSamples).forEach(function(color){
-    var samples=colorSamples[color];
-    if(samples.length===0)return;
-    var rr=0,gg=0,bb=0;
-    samples.forEach(function(rgb){rr+=rgb[0];gg+=rgb[1];bb+=rgb[2];});
-    var n=samples.length;
-    learnedAnchors[color]=[Math.round(rr/n),Math.round(gg/n),Math.round(bb/n)];
-  });
-  
-  // === ③ 儲存 ===
-  var calib={
-    perFace:{},'anchors':learnedAnchors,
-    device:_getDeviceKey(),
-    date:new Date().toISOString().substring(0,10)
-  };
-  ['U','R','F','D','L','B'].forEach(function(f){calib.perFace[f]=orientResult[f].name;});
-  _saveCalibration(calib);
-  window._calibInProgress=false;
-  
-  // === ④ 顯示結果 ===
-  var h='<div style="font-size:14px;font-weight:900;color:#0b0;margin-bottom:6px">✅ 校正完成！</div>';
-  h+='<div style="font-size:11px;color:rgba(255,255,255,.6);line-height:1.8">';
-  h+='<b>方位校正：</b><br>';
-  var cn={U:'上',R:'右',F:'前',D:'下',L:'左',B:'後'};
-  var trName={none:'不翻轉',LR:'←→左右',UD:'↕上下','180':'↻180°'};
-  ['U','R','F','D','L','B'].forEach(function(f){
-    h+=cn[f]+'('+f+'): '+(trName[orientResult[f].name])+' ('+orientResult[f].score+'/9)<br>';
-  });
-  h+='<br><b>顏色錨點（學習到的 RGB）：</b><br>';
-  Object.entries(learnedAnchors).forEach(function(e){
-    h+='<span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:rgb('+e[1].join(',')+');vertical-align:middle"></span> '+CN[e[0]]+': rgb('+e[1].join(',')+')<br>';
-  });
-  h+='<br>裝置: <b>'+_getDeviceKey()+'</b>　樣本: '+Object.values(colorSamples).reduce(function(s,a){return s+a.length;},0)+' 格';
-  h+='</div>';
-  document.getElementById('title').textContent='✅ 校正完成';
-  document.getElementById('info').innerHTML=h;
-  // 恢復手動輸入的正確 faceColors（可直接求解）
+  ['U','R','F','D','L','B'].forEach(function(f){var best={name:'none',score:0};transforms.forEach(function(tr){var score=matchCount(tr.fn(scan[f]),manual[f]);if(score>best.score)best={name:tr.name,score:score};});orientResult[f]=best;});
+  var rawRGB=window._calibRawData;var colorSamples={W:[],R:[],B:[],O:[],G:[],Y:[]};
+  ['U','R','F','D','L','B'].forEach(function(f){if(!rawRGB[f])return;var bestTr=transforms.find(function(t){return t.name===orientResult[f].name;});
+    for(var i=0;i<9;i++){var mc=manual[f][i];var ri=i;if(bestTr&&bestTr.name==='LR')ri=[2,1,0,5,4,3,8,7,6][i];else if(bestTr&&bestTr.name==='UD')ri=[6,7,8,3,4,5,0,1,2][i];else if(bestTr&&bestTr.name==='180')ri=[8,7,6,5,4,3,2,1,0][i];if(rawRGB[f][ri]&&mc&&mc!=='X')colorSamples[mc].push(rawRGB[f][ri]);}});
+  var learnedAnchors={};Object.keys(colorSamples).forEach(function(color){var s=colorSamples[color];if(s.length===0)return;var rr=0,gg=0,bb=0;s.forEach(function(rgb){rr+=rgb[0];gg+=rgb[1];bb+=rgb[2];});var n=s.length;learnedAnchors[color]=[Math.round(rr/n),Math.round(gg/n),Math.round(bb/n)];});
+  var calib={perFace:{},anchors:learnedAnchors,device:_getDeviceKey(),date:new Date().toISOString().substring(0,10)};
+  ['U','R','F','D','L','B'].forEach(function(f){calib.perFace[f]=orientResult[f].name;});_saveCalibration(calib);
+  if(!window._cubeProfiles)window._cubeProfiles={cubes:{},activeCube:null};
+  window._cubeProfiles.cubes[cubeName]={anchors:learnedAnchors,samples:Object.values(colorSamples).reduce(function(s,a){return s+a.length;},0),date:calib.date,device:_getDeviceKey()};
+  window._cubeProfiles.activeCube=cubeName;_saveProfiles();window._calibInProgress=false;
+  var h='<div style="font-size:14px;font-weight:900;color:#0b0;margin-bottom:4px">\u2705 \u6821\u6B63\u5B8C\u6210\uFF01</div>';
+  h+='<div style="font-size:13px;color:#FFD700;margin-bottom:4px">\u{1F9CA} '+cubeName+'</div>';
+  h+='<div style="font-size:11px;color:rgba(255,255,255,.5);line-height:1.6">';
+  var cn2={U:'\u4E0A',R:'\u53F3',F:'\u524D',D:'\u4E0B',L:'\u5DE6',B:'\u5F8C'};var trN={none:'\u2713',LR:'\u2194',UD:'\u2195','180':'\u21BB'};
+  ['U','R','F','D','L','B'].forEach(function(f){h+=cn2[f]+trN[orientResult[f].name]+' ';});h+=' ';
+  Object.entries(learnedAnchors).forEach(function(e){h+='<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:rgb('+e[1].join(',')+');vertical-align:middle;margin:0 1px"></span>';});
+  h+='<br>\u54C1\u724C\u6578: '+_getCubeList().length+'\u3000\u88DD\u7F6E: '+_getDeviceKey()+'</div>';
+  document.getElementById('title').textContent='\u2705 '+cubeName;document.getElementById('info').innerHTML=h;
   ['U','R','F','D','L','B'].forEach(function(f){faceColors[f]=manual[f].slice();});
-  document.getElementById('btnRow').innerHTML='<button class="btn" onclick="showModeSelect()">🚀 直接求解這個魔方</button><button class="btn" style="margin-top:6px;background:rgba(255,255,255,.1)" onclick="location.reload()">🏠 回首頁</button><button class="btn" style="margin-top:4px;font-size:11px;color:#999;background:none" onclick="_clearCalibration()">🗑️ 清除校正</button>';
+  document.getElementById('btnRow').innerHTML='<button class="btn" onclick="showModeSelect()">\u{1F680} \u76F4\u63A5\u6C42\u89E3</button><button class="btn" style="margin-top:6px;background:rgba(255,255,255,.1)" onclick="location.reload()">\u{1F3E0} \u56DE\u9996\u9801</button><button class="btn" style="margin-top:4px;font-size:11px;color:#999;background:none" onclick="_clearCalibration()">\u{1F5D1}\uFE0F \u6E05\u9664\u6240\u6709</button>';
 }
 
 function _clearCalibration(){
-  localStorage.removeItem('camCalib_desktop');
-  localStorage.removeItem('camCalib_mobile');
-  localStorage.removeItem('camCalib_tablet');
-  window._camCalibration=null;
-  location.reload();
+  localStorage.removeItem('camCalib_desktop');localStorage.removeItem('camCalib_mobile');localStorage.removeItem('camCalib_tablet');localStorage.removeItem('cubeProfiles');
+  window._camCalibration=null;window._cubeProfiles=null;location.reload();
 }
+
 
 // ===== SOLVER WORKER (Kociemba) =====
 function initSolver(){
