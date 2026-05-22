@@ -2407,14 +2407,7 @@ window._fb={uid:null,db:null,ready:false};
 
 function _fbSignIn(){
   var provider=new firebase.auth.GoogleAuthProvider();
-  firebase.auth().signInWithPopup(provider).catch(function(e){
-    // 手機可能不支援 popup，改用 redirect
-    if(e.code==='auth/popup-blocked'||e.code==='auth/cancelled-popup-request'){
-      firebase.auth().signInWithRedirect(provider);
-    } else {
-      alert('登入失敗: '+e.message);
-    }
-  });
+  firebase.auth().signInWithRedirect(provider);
 }
 
 function _fbSignOut(){
