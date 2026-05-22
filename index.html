@@ -74,6 +74,7 @@ canvas#ov{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:conta
  <button class="btn btn-sm" style="margin-top:6px;background:rgba(255,255,255,.08);color:#999;font-size:11px" onclick="startManual()">✏️ 手動輸入顏色</button>
  <button class="btn btn-sm" style="margin-top:4px;background:rgba(255,180,0,.12);color:#FFD700;font-size:11px;border:1px solid rgba(255,180,0,.3)" onclick="startCalibration()">🔧 鏡頭校正</button>
  <button class="btn btn-sm" style="margin-top:4px;background:rgba(0,180,255,.1);color:#00D2FF;font-size:10px" onclick="_showSyncUI()">☁️ 雲端同步</button>
+ <div id="syncBadge" style="font-size:10px;margin-top:2px;min-height:14px"></div>
  <input type="file" id="galleryInput" accept="image/*" multiple style="display:none" onchange="handleGalleryFiles(this.files)">
  <div id="brainStatus" style="margin-top:12px;font-size:11px;color:rgba(255,255,255,.3)">🧠 正在喚醒魔方大腦...</div>
 </div>
@@ -2200,8 +2201,7 @@ async function startApp(){
       vid.style.transform='scaleX(-1)';
       document.getElementById('ov').style.transform='scaleX(-1)';
     }
-    // 手電筒（僅後鏡頭有 torch）
-    try{if(track&&!window._isFrontCamera&&caps.torch){await track.applyConstraints({advanced:[{torch:true}]});}}catch(te){}
+    // 手電筒已關閉（亮面魔方會反光）
     ov.width=vid.videoWidth||720;ov.height=vid.videoHeight||1280;
     mode='scan';scanIdx=0;
     document.getElementById('topBar').style.display='block';
@@ -2377,7 +2377,7 @@ function _clearCalibration(){
   location.reload();
 }
 
-// ===== Firebase 雲端同步 =====
+// ===== Firebase 雲端同步（Google 登入）=====
 window._fb={uid:null,db:null,ready:false};
 (function(){
   try{
@@ -2387,28 +2387,67 @@ window._fb={uid:null,db:null,ready:false};
       projectId:"screw-inventory"
     });
     window._fb.db=firebase.firestore();
-    // 匿名登入
-    firebase.auth().signInAnonymously().then(function(cred){
-      window._fb.uid=cred.user.uid;
-      window._fb.ready=true;
-      console.log('Firebase ready: '+window._fb.uid);
-      // 自動從雲端拉取（如果本地沒有校正資料）
-      if(!window._camCalibration&&!window._cubeProfiles){_fbPull();}
-    }).catch(function(e){console.log('Firebase auth failed:',e.message);});
+    // 監聽登入狀態（自動恢復上次的 Google 登入）
+    firebase.auth().onAuthStateChanged(function(user){
+      if(user){
+        window._fb.uid=user.uid;
+        window._fb.ready=true;
+        window._fb.email=user.email||'anonymous';
+        console.log('Firebase ready: '+user.email+' uid='+user.uid.substring(0,8));
+        // 自動拉取雲端資料
+        _fbPull();
+        _updateSyncBadge();
+      } else {
+        window._fb.uid=null;window._fb.ready=false;window._fb.email=null;
+        _updateSyncBadge();
+      }
+    });
   }catch(e){console.log('Firebase init failed:',e.message);}
 })();
+
+function _fbSignIn(){
+  var provider=new firebase.auth.GoogleAuthProvider();
+  firebase.auth().signInWithPopup(provider).catch(function(e){
+    // 手機可能不支援 popup，改用 redirect
+    if(e.code==='auth/popup-blocked'||e.code==='auth/cancelled-popup-request'){
+      firebase.auth().signInWithRedirect(provider);
+    } else {
+      alert('登入失敗: '+e.message);
+    }
+  });
+}
+
+function _fbSignOut(){
+  firebase.auth().signOut().then(function(){
+    window._fb.uid=null;window._fb.ready=false;
+    _updateSyncBadge();
+  });
+}
+
+function _updateSyncBadge(){
+  var el=document.getElementById('syncBadge');
+  if(!el)return;
+  if(window._fb.ready&&window._fb.email){
+    el.innerHTML='<span style="color:rgba(0,210,255,.8);font-size:10px">☁️ '+window._fb.email.split('@')[0]+'</span>';
+  } else {
+    el.innerHTML='<span style="color:rgba(255,255,255,.25);font-size:10px">☁️ 未登入</span>';
+  }
+}
 
 function _fbPush(){
   if(!window._fb.ready||!window._fb.uid)return;
   var dev=_getDeviceKey();
   var data={
     updatedAt:firebase.firestore.FieldValue.serverTimestamp(),
-    device:dev
+    lastDevice:dev,
+    email:window._fb.email||''
   };
+  // 上傳當前裝置的校正
   if(window._camCalibration)data['calib_'+dev]=window._camCalibration;
+  // 上傳魔方品牌檔案（跨裝置共用）
   if(window._cubeProfiles)data.cubeProfiles=window._cubeProfiles;
   window._fb.db.collection('magic-cfop-users').doc(window._fb.uid).set(data,{merge:true}).then(function(){
-    console.log('Firebase push OK');
+    console.log('Firebase push OK ('+dev+')');
   }).catch(function(e){console.log('Firebase push failed:',e.message);});
 }
 
@@ -2418,24 +2457,44 @@ function _fbPull(){
     if(!doc.exists)return;
     var data=doc.data();
     var dev=_getDeviceKey();
-    // 拉取裝置校正
-    if(data['calib_'+dev]&&!window._camCalibration){
+    var updated=false;
+    // 拉取當前裝置的校正（不覆蓋已有的本地資料）
+    if(data['calib_'+dev]){
       window._camCalibration=data['calib_'+dev];
       localStorage.setItem('camCalib_'+dev,JSON.stringify(data['calib_'+dev]));
+      updated=true;
     }
-    // 拉取品牌檔案
-    if(data.cubeProfiles&&!window._cubeProfiles){
-      window._cubeProfiles=data.cubeProfiles;
-      localStorage.setItem('cubeProfiles',JSON.stringify(data.cubeProfiles));
+    // 也嘗試拉取其他裝置的校正（供參考，不覆蓋本機）
+    ['desktop','mobile','tablet'].forEach(function(d){
+      if(d!==dev&&data['calib_'+d]){
+        localStorage.setItem('camCalib_'+d,JSON.stringify(data['calib_'+d]));
+      }
+    });
+    // 拉取品牌檔案（合併：雲端有但本地沒有的品牌加入）
+    if(data.cubeProfiles){
+      if(!window._cubeProfiles)window._cubeProfiles={cubes:{},activeCube:null};
+      var cloudCubes=data.cubeProfiles.cubes||{};
+      Object.keys(cloudCubes).forEach(function(name){
+        if(!window._cubeProfiles.cubes[name]){
+          window._cubeProfiles.cubes[name]=cloudCubes[name];
+          updated=true;
+        }
+      });
+      if(!window._cubeProfiles.activeCube&&data.cubeProfiles.activeCube){
+        window._cubeProfiles.activeCube=data.cubeProfiles.activeCube;
+      }
+      localStorage.setItem('cubeProfiles',JSON.stringify(window._cubeProfiles));
     }
-    console.log('Firebase pull OK');
-    // 更新首頁顯示
+    console.log('Firebase pull OK'+(updated?' (data updated)':' (no changes)'));
+    // 更新首頁
     setTimeout(function(){
       var el=document.getElementById('brandStatus');
       if(el){
         var active=_getActiveCube();
-        if(active)el.innerHTML='<span style="color:#0b0">🧊 '+active+'</span> <span style="color:rgba(255,255,255,.3)">('+_getDeviceKey()+', ☁️ 已同步)</span>';
+        var dev2=_getDeviceKey();
+        if(active)el.innerHTML='<span style="color:#0b0">🧊 '+active+'</span> <span style="color:rgba(255,255,255,.3)">('+dev2+')</span>';
       }
+      _updateSyncBadge();
     },200);
   }).catch(function(e){console.log('Firebase pull failed:',e.message);});
 }
@@ -2445,27 +2504,28 @@ function _fbDelete(){
   window._fb.db.collection('magic-cfop-users').doc(window._fb.uid).delete().catch(function(e){});
 }
 
-// 在每次儲存校正時也推送到 Firebase
+// 攔截每次儲存，自動同步到 Firebase
 var _origSaveCalib=_saveCalibration;
 window._saveCalibration=function(calib){_origSaveCalib(calib);setTimeout(_fbPush,500);};
 var _origSaveProf=_saveProfiles;
 window._saveProfiles=function(){_origSaveProf();setTimeout(_fbPush,500);};
 
-
 function _showSyncUI(){
   var el=document.getElementById('startOv');
   var h='<div style="font-size:18px;font-weight:900;color:#00D2FF;margin-bottom:12px">☁️ 雲端同步</div>';
-  h+='<div style="font-size:12px;color:rgba(255,255,255,.6);line-height:1.6;max-width:300px;text-align:center">';
-  if(window._fb.ready){
-    h+='<span style="color:#0b0">✅ 已連線</span><br>裝置ID: '+window._fb.uid.substring(0,8)+'...<br>裝置類型: '+_getDeviceKey()+'<br><br>';
+  h+='<div style="font-size:12px;color:rgba(255,255,255,.6);line-height:1.6;max-width:300px;margin:0 auto;text-align:center">';
+  if(window._fb.ready&&window._fb.email){
+    h+='<span style="color:#0b0">✅ '+window._fb.email+'</span><br>';
+    h+='裝置: '+_getDeviceKey()+'<br>';
     var list=_getCubeList();
-    if(list.length>0){h+='已校正品牌: '+list.join(', ')+'<br><br>';}
-    h+='</div>';
-    h+='<button class="btn" style="background:rgba(0,180,255,.3);color:#fff;font-size:13px;padding:10px 24px" onclick="_fbPush();alert(\'已上傳！\')">⬆️ 上傳到雲端</button>';
-    h+='<button class="btn" style="margin-top:6px;background:rgba(0,180,255,.15);color:#ccc;font-size:12px;padding:8px 20px" onclick="_fbPull();setTimeout(function(){location.reload();},1000)">⬇️ 從雲端下載</button>';
+    if(list.length>0)h+='品牌: '+list.join(', ')+'<br>';
+    h+='<br></div>';
+    h+='<button class="btn" style="background:rgba(0,180,255,.3);color:#fff;font-size:13px;padding:10px 24px" onclick="_fbPush();alert(\'已上傳！\')">⬆️ 上傳校正資料</button>';
+    h+='<button class="btn" style="margin-top:6px;background:rgba(0,180,255,.15);color:#ccc;font-size:12px;padding:8px 20px" onclick="_fbPull();setTimeout(function(){location.reload();},1500)">⬇️ 從雲端下載</button>';
+    h+='<button class="btn" style="margin-top:8px;font-size:11px;color:#999;background:none" onclick="_fbSignOut();location.reload()">🚪 登出</button>';
   } else {
-    h+='<span style="color:#FF6B6B">⏳ Firebase 連線中...</span><br>請稍候或檢查網路<br><br>';
-    h+='</div>';
+    h+='使用 Google 帳號登入<br>手機和筆電用同一帳號<br>校正資料自動同步<br><br></div>';
+    h+='<button class="btn" style="background:#fff;color:#333;font-size:14px;font-weight:900;padding:12px 28px;display:flex;align-items:center;gap:8px;margin:0 auto" onclick="_fbSignIn()"><img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" style="width:20px;height:20px"> Google 登入</button>';
   }
   h+='<button class="btn" style="margin-top:12px;font-size:11px;color:#999;background:none" onclick="location.reload()">↩️ 返回</button>';
   el.innerHTML=h;
