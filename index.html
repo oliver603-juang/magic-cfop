@@ -4618,14 +4618,14 @@ function classifyCornerOLL(st){
 }
 // ===== v55: 公式段圖案卡（先認圖 → 先猜後教） =====
 // 黃面圖案圖：中央3x3 = D面(把魔方「往前翻兩下」黃面朝上時看到的樣子)，外圈12格 = 相鄰側面貼紙
-function yellowFaceSVG(st,mode){
+function yellowFaceSVG(st,mode,px){
   var sz=30,g=3,t=16;
   var W=2*t+3*sz+8*g;
   var x0=t+2*g,y0=t+2*g;
   var CM={W:'#f5f5f5',B:'#0051BA',R:'#C41E3A',Y:'#FFD500',G:'#009E60',O:'#FF5800'};
   function col(c){return mode==='OLL'?(c==='Y'?'#FFD500':'#3a3f47'):(CM[c]||'#3a3f47');}
   function rect(x,y,w,h,c){return '<rect x="'+x+'" y="'+y+'" width="'+w+'" height="'+h+'" rx="3" fill="'+c+'" stroke="rgba(0,0,0,.45)" stroke-width="1"/>';}
-  var s='<svg viewBox="0 0 '+W+' '+W+'" width="150" height="150">';
+  var s='<svg viewBox="0 0 '+W+' '+W+'" width="'+(px||150)+'" height="'+(px||150)+'">';
   for(var r=0;r<3;r++)for(var cc=0;cc<3;cc++){s+=rect(x0+cc*(sz+g),y0+r*(sz+g),sz,sz,col(st.D[r*3+cc]));}
   // 外圈：上=F底列(F6,F7,F8) 左=L(8,7,6) 右=R(6,7,8) 下=B(8,7,6) — 依 x2 翻面視角推導
   var top=[st.F[6],st.F[7],st.F[8]],left=[st.L[8],st.L[7],st.L[6]],right=[st.R[6],st.R[7],st.R[8]],bot=[st.B[8],st.B[7],st.B[6]];
@@ -4659,13 +4659,20 @@ function showPatternCard(mk,stepIdx){
         if(co)link={type:'OLL',id:co.id,nick:co.nick,tip:co.tip};}
     }catch(e){}
   }
+  // v58: PLL 段用 detectPLL 從實際狀態辨識圖鑑案例
+  if(!link&&mk.stage==='PLL'){
+    try{var dp=detectPLL(st);if(dp&&dp.pll)link={type:'PLL',id:dp.pll.id,nick:dp.pll.nick,tip:dp.pll.tip};}catch(e){}
+  }
   if(!link&&hit)link={type:mk.stage,id:hit.id,nick:hit.nick,tip:hit.tip};
   var name=link?link.nick:(hit?hit.nick:mk.explain);
   var tip=link&&link.tip?link.tip:(hit&&hit.tip?hit.tip:'');
   var key='CARD_'+mk.stage+'_'+name;
   var p=loadProgress();var seen=(p[key]&&p[key].n)||0;
   var prevLink=(p[key]&&p[key].link)||null;
-  var cardSig=null;try{if(mk.stage==='OLL')cardSig=encodeOLLSig(st);}catch(e){}
+  var cardSig=null;try{
+    if(mk.stage==='OLL')cardSig=encodeOLLSig(st);
+    else if(mk.stage==='PLL'&&st.D.every(function(x){return x==='Y';}))cardSig='P'+encodePLLSig(st); // v58
+  }catch(e){}
   p[key]={n:seen+1,link:link?(link.type+'_'+link.id):prevLink,sig:cardSig||((p[key]&&p[key].sig)||null)};saveProgress(p);
   var quiz=seen>=1;
   var old=document.getElementById('patternCard');if(old)old.remove();
@@ -4726,9 +4733,15 @@ function _cardGo(stepIdx){
 }
 // ===== v56: 圖案卡收集冊 =====
 function _stateFromSig(sig){
+  var fs=['F','R','B','L'];
+  if(sig[0]==='P'){ // v58: PLL 彩色簽名 ('P'+12色)
+    var stP={D:Array(9).fill('Y'),F:Array(9).fill('X'),R:Array(9).fill('X'),B:Array(9).fill('X'),L:Array(9).fill('X'),U:Array(9).fill('X')};
+    var body=sig.slice(1);
+    for(var fp=0;fp<4;fp++)for(var jp=0;jp<3;jp++)stP[fs[fp]][6+jp]=body[fp*3+jp];
+    return stP;
+  }
   var st={D:[],F:Array(9).fill('X'),R:Array(9).fill('X'),B:Array(9).fill('X'),L:Array(9).fill('X'),U:Array(9).fill('X')};
   for(var i=0;i<9;i++)st.D.push(sig[i]==='1'?'Y':'X');
-  var fs=['F','R','B','L'];
   for(var f=0;f<4;f++)for(var j=0;j<3;j++)st[fs[f]][6+j]=sig[9+f*3+j]==='1'?'Y':'X';
   return st;
 }
@@ -4753,8 +4766,10 @@ function showCardCollection(){
     var bg=c.mastered?'rgba(0,230,118,.08)':'rgba(255,255,255,.04)';
     var bd=c.mastered?'rgba(0,230,118,.25)':'rgba(255,255,255,.08)';
     var diag='';
-    if(c.sig&&c.sig.length===21){ // 用實際遇到的圖案簽名畫圖（最準確）
+    if(c.sig&&c.sig.length===21){ // OLL: 用實際遇到的圖案簽名畫圖（最準確）
       try{diag='<div style="flex-shrink:0">'+drawDFaceSVG(_stateFromSig(c.sig),64)+'</div>';}catch(e){}
+    }else if(c.sig&&c.sig[0]==='P'){ // v58 PLL: 彩色頂視圖
+      try{diag='<div style="flex-shrink:0">'+yellowFaceSVG(_stateFromSig(c.sig),'PLL',64)+'</div>';}catch(e){}
     }
     h+='<div style="background:'+bg+';border:1px solid '+bd+';border-radius:10px;padding:10px;margin:6px auto;max-width:340px;text-align:left;display:flex;gap:10px;align-items:center">';
     h+=diag+'<div style="flex:1;min-width:0">';
@@ -5061,6 +5076,34 @@ var OLL_SIGMAP={};
     }
   });
 })();
+
+// --- v58: PLL Signature HashMap (21案例 × 前後AUF 16變體) ---
+var PLL_SIGMAP={};
+(function(){
+  function rv(moves){return moves.slice().reverse().map(function(m){if(m.indexOf("'")>-1)return m.replace("'","");if(m.indexOf("2")>-1)return m;return m+"'";});}
+  function enc(s){var k='';['F','R','B','L'].forEach(function(f){for(var i=6;i<=8;i++)k+=s[f][i];});return k;}
+  PLL_DB.forEach(function(p){
+    for(var a=0;a<4;a++){
+      var s=_lbl.solved();
+      for(var x=0;x<a;x++)_lbl.dm(s,'D');
+      _lbl.dms(s,rv(p.moves));
+      for(var b=0;b<4;b++){
+        var k=enc(s);
+        if(!PLL_SIGMAP[k])PLL_SIGMAP[k]={id:p.id,nick:p.nick};
+        _lbl.dm(s,'D');
+      }
+    }
+  });
+})();
+// v58: 從狀態辨識 PLL 案例（需 D 面全黃 = OLL 已完成）
+function encodePLLSig(state){var k='';['F','R','B','L'].forEach(function(f){for(var i=6;i<=8;i++)k+=state[f][i];});return k;}
+function detectPLL(state){
+  if(!state.D.every(function(x){return x==='Y';}))return null;
+  var hit=PLL_SIGMAP[encodePLLSig(state)];
+  if(!hit)return null;
+  var entry=null;for(var i=0;i<PLL_DB.length;i++){if(PLL_DB[i].id===hit.id){entry=PLL_DB[i];break;}}
+  return entry?{pll:entry}:null;
+}
 
 // --- Progress (localStorage) ---
 var TRAIN_KEY='magic_cfop_v3';
