@@ -4579,6 +4579,43 @@ var levelMgr={
   }
 };
 
+// ===== v56: 角塊 OLL 七式分類器（不依賴 DB 公式反演，修正 SIGMAP 缺漏） =====
+function _trimAUF(mv){var a=mv.slice();while(a.length&&a[0][0]==='D')a.shift();while(a.length&&a[a.length-1][0]==='D')a.pop();return a;}
+function _sigsForIds(ids){
+  var out={};
+  ids.forEach(function(id){
+    var o=null;for(var i=0;i<OLL_DB.length;i++){if(OLL_DB[i].id===id){o=OLL_DB[i];break;}}
+    if(!o)return;
+    var s=_lbl.solved();
+    var rev=o.moves.slice().reverse().map(function(m){return m.indexOf("'")>-1?m.replace("'",""):(m.indexOf('2')>-1?m:m+"'");});
+    _lbl.dms(s,rev);
+    for(var a=0;a<4;a++){out[encodeOLLSig(s)]=id;_lbl.dm(s,'D');}
+  });
+  return out;
+}
+function classifyCornerOLL(st){
+  var edgesOK=[1,3,5,7].every(function(i){return st.D[i]==='Y';});
+  if(!edgesOK)return null;
+  var corners=[0,2,6,8].filter(function(i){return st.D[i]!=='Y';});
+  var n=corners.length;if(!n)return null;
+  var sideY={};['F','R','B','L'].forEach(function(f){sideY[f]=(st[f][6]==='Y'?1:0)+(st[f][8]==='Y'?1:0);});
+  if(n===2){
+    var diag=(corners.indexOf(0)>=0&&corners.indexOf(8)>=0)||(corners.indexOf(2)>=0&&corners.indexOf(6)>=0);
+    if(diag)return 25;
+    var same=['F','R','B','L'].some(function(f){return sideY[f]===2;});
+    return same?23:24;
+  }
+  if(n===3){
+    var m=_sigsForIds([26,27]);var s=_lbl.clone(st);
+    for(var r=0;r<4;r++){var g=encodeOLLSig(s);if(m[g])return m[g];_lbl.dm(s,'D');}
+    return 27;
+  }
+  if(n===4){
+    var opp=(sideY.F===2&&sideY.B===2)||(sideY.L===2&&sideY.R===2);
+    return opp?21:22;
+  }
+  return null;
+}
 // ===== v55: 公式段圖案卡（先認圖 → 先猜後教） =====
 // 黃面圖案圖：中央3x3 = D面(把魔方「往前翻兩下」黃面朝上時看到的樣子)，外圈12格 = 相鄰側面貼紙
 function yellowFaceSVG(st,mode){
@@ -4609,18 +4646,36 @@ function showPatternCard(mk,stepIdx){
   var segStr=segMoves.join(' ');
   var st={};['U','R','F','D','L','B'].forEach(function(f){st[f]=cubeState[f].slice();});
   var db=(mk.stage==='OLL'?OLL_DB:PLL_DB);
-  var hit=null;for(var d=0;d<db.length;d++){if(db[d].moves.join(' ')===segStr){hit=db[d];break;}}
-  var name=hit?hit.nick:mk.explain;
-  var tip=hit&&hit.tip?hit.tip:'';
+  // v56: 公式比對時去掉頭尾 AUF（D 轉）提高命中率
+  var segCore=_trimAUF(segMoves).join(' ');
+  var hit=null;for(var d=0;d<db.length;d++){var dbStr=db[d].moves.join(' ');if(dbStr===segStr||dbStr===segCore){hit=db[d];break;}}
+  // v56: 圖鑑連動 — OLL 角塊段用 detectOLL＋七式分類器辨識實際圖案；公式相符時用圖鑑條目
+  var link=null;
+  if(mk.stage==='OLL'&&(mk.explain.indexOf('角塊')>=0||mk.explain.indexOf('小魚')>=0)){
+    try{
+      var det=detectOLL(st);
+      var cid=(det&&det.oll&&det.oll.cat==='cross')?det.oll.id:classifyCornerOLL(st);
+      if(cid){var co=null;for(var ci2=0;ci2<OLL_DB.length;ci2++){if(OLL_DB[ci2].id===cid){co=OLL_DB[ci2];break;}}
+        if(co)link={type:'OLL',id:co.id,nick:co.nick,tip:co.tip};}
+    }catch(e){}
+  }
+  if(!link&&hit)link={type:mk.stage,id:hit.id,nick:hit.nick,tip:hit.tip};
+  var name=link?link.nick:(hit?hit.nick:mk.explain);
+  var tip=link&&link.tip?link.tip:(hit&&hit.tip?hit.tip:'');
   var key='CARD_'+mk.stage+'_'+name;
-  var p=loadProgress();var seen=(p[key]&&p[key].n)||0;p[key]={n:seen+1};saveProgress(p);
+  var p=loadProgress();var seen=(p[key]&&p[key].n)||0;
+  var prevLink=(p[key]&&p[key].link)||null;
+  var cardSig=null;try{if(mk.stage==='OLL')cardSig=encodeOLLSig(st);}catch(e){}
+  p[key]={n:seen+1,link:link?(link.type+'_'+link.id):prevLink,sig:cardSig||((p[key]&&p[key].sig)||null)};saveProgress(p);
   var quiz=seen>=1;
   var old=document.getElementById('patternCard');if(old)old.remove();
   var card=document.createElement('div');card.id='patternCard';
   card.style.cssText='position:absolute;inset:0;z-index:60;background:rgba(0,0,0,.93);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:12px;overflow-y:auto';
   card.onclick=function(e){e.stopPropagation();};
   var h='<div style="font-size:12px;font-weight:800;color:#00D2FF">'+mk.stage+' 圖案卡</div>';
-  h+='<div style="font-size:20px;font-weight:900;color:#FFD700;margin:4px 0">'+name+'</div>';
+  h+='<div style="font-size:20px;font-weight:900;color:#FFD700;margin:4px 0">'+name
+    +(link?' <span style="font-size:11px;color:rgba(255,255,255,.35)">('+link.type+' '+link.id+')</span>':'')
+    +(link&&isMastered(link.type+'_'+link.id)?' <span style="font-size:13px;color:#00E676">⭐已精通</span>':'')+'</div>';
   h+='<div style="margin:6px 0">'+yellowFaceSVG(st,mk.stage)+'</div>';
   h+='<div style="font-size:12px;color:#00E676;font-weight:800">🔄 把魔方「往前翻兩下」讓黃面朝上，對照圖案<br><span style="color:rgba(255,255,255,.45);font-weight:400;font-size:11px">（不要左右翻會鏡像！認完翻回白面朝上再開始轉）</span></div>';
   if(tip)h+='<div style="font-size:11px;color:rgba(255,255,255,.5);margin-top:4px">💡 '+tip+'</div>';
@@ -4652,10 +4707,12 @@ function showPatternCard(mk,stepIdx){
         if(ok){answered=true;el.style.border='2px solid #00E676';el.style.background='rgba(0,230,118,.15)';
           document.getElementById('quizMsg').innerHTML='<span style="color:#00E676">✅ 答對了！開始轉！</span>';
           rq.t++;rq.c++;rq.s++;pq[kq]=rq;saveProgress(pq);
+          if(link)recordAttempt(link.type+'_'+link.id,true); // v56: 連動圖鑑精通度
           setTimeout(function(){_cardGo(stepIdx);},800);
         }else{el.style.border='2px solid #FF5252';el.style.background='rgba(255,82,82,.15)';el.style.opacity='.6';
           document.getElementById('quizMsg').innerHTML='<span style="color:#FF5252">❌ 不是這條，再想想～</span>';
           rq.t++;rq.s=0;pq[kq]=rq;saveProgress(pq);
+          if(link)recordAttempt(link.type+'_'+link.id,false); // v56: 連動圖鑑精通度
         }
       };
     });
@@ -4666,6 +4723,51 @@ function _cardGo(stepIdx){
   window._cardAck[stepIdx]=1;
   var el=document.getElementById('patternCard');if(el)el.remove();
   showSolveStep();
+}
+// ===== v56: 圖案卡收集冊 =====
+function _stateFromSig(sig){
+  var st={D:[],F:Array(9).fill('X'),R:Array(9).fill('X'),B:Array(9).fill('X'),L:Array(9).fill('X'),U:Array(9).fill('X')};
+  for(var i=0;i<9;i++)st.D.push(sig[i]==='1'?'Y':'X');
+  var fs=['F','R','B','L'];
+  for(var f=0;f<4;f++)for(var j=0;j<3;j++)st[fs[f]][6+j]=sig[9+f*3+j]==='1'?'Y':'X';
+  return st;
+}
+function showCardCollection(){
+  var ui=setupTrainUI();
+  var p=loadProgress();
+  var cards=[];
+  Object.keys(p).forEach(function(k){
+    if(k.indexOf('CARD_')!==0)return;
+    var rest=k.slice(5);var us=rest.indexOf('_');if(us<0)return;
+    var stage=rest.slice(0,us),nm=rest.slice(us+1);
+    var q=p['QUIZ_'+rest]||null;
+    cards.push({stage:stage,name:nm,seen:(p[k].n||0),link:p[k].link||null,sig:p[k].sig||null,q:q,mastered:isMastered('QUIZ_'+rest)});
+  });
+  cards.sort(function(a,b){return a.stage===b.stage?(b.seen-a.seen):(a.stage<b.stage?-1:1);});
+  var h='<div style="padding:14px;text-align:center;overflow-y:auto;height:100%;-webkit-overflow-scrolling:touch">';
+  h+='<div style="font-size:17px;font-weight:900;color:#FFD500;margin-bottom:2px">🃏 圖案卡收集冊</div>';
+  var mCount=0;cards.forEach(function(c){if(c.mastered)mCount++;});
+  h+='<div style="font-size:11px;color:rgba(255,255,255,.4);margin-bottom:10px">遇過 '+cards.length+' 種圖案 · 已精通 '+mCount+' 種</div>';
+  if(!cards.length){h+='<div style="color:rgba(255,255,255,.4);font-size:13px;margin:30px 0">還沒有收集到圖案卡<br><span style="font-size:11px">用「🧩 CFOP 實作解題」完整解一次魔方就會開始收集！</span></div>';}
+  cards.forEach(function(c){
+    var bg=c.mastered?'rgba(0,230,118,.08)':'rgba(255,255,255,.04)';
+    var bd=c.mastered?'rgba(0,230,118,.25)':'rgba(255,255,255,.08)';
+    var diag='';
+    if(c.sig&&c.sig.length===21){ // 用實際遇到的圖案簽名畫圖（最準確）
+      try{diag='<div style="flex-shrink:0">'+drawDFaceSVG(_stateFromSig(c.sig),64)+'</div>';}catch(e){}
+    }
+    h+='<div style="background:'+bg+';border:1px solid '+bd+';border-radius:10px;padding:10px;margin:6px auto;max-width:340px;text-align:left;display:flex;gap:10px;align-items:center">';
+    h+=diag+'<div style="flex:1;min-width:0">';
+    h+='<div style="font-size:13px;font-weight:800;color:#FFD700">'+(c.stage==='OLL'?'☀️':'🎯')+' '+c.name
+      +(c.link?' <span style="color:rgba(255,255,255,.3);font-size:10px">('+c.link.replace('_',' ')+')</span>':'')
+      +(c.mastered?' <span style="color:#00E676;font-size:11px">⭐已精通</span>':'')+'</div>';
+    var qs=c.q&&c.q.t?('答對率 '+Math.round(c.q.c/c.q.t*100)+'%（'+c.q.c+'/'+c.q.t+'）· 連對 '+c.q.s):'還沒測驗過（再遇到會考你！）';
+    h+='<div style="font-size:10px;color:rgba(255,255,255,.45);margin-top:2px">看過 '+c.seen+' 次 · '+qs+'</div>';
+    h+='</div></div>';
+  });
+  h+='<button class="btn btn-sm" style="margin-top:12px;background:rgba(255,255,255,.1);color:#ccc" onclick="showTrainingMenu()">↩️ 回訓練選單</button>';
+  h+='</div>';
+  ui.innerHTML=h;
 }
 function showSolveStep(){
   if(solveStep===-1){solveStep++;if(solveStep>0)applyMove(solution[solveStep-1]);}
@@ -5084,6 +5186,7 @@ function showTrainingMenu(){
 
   // Quick links
   h+='<div style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-bottom:10px">';
+  h+='<button class="btn" style="background:rgba(255,255,255,.06);color:#aaa;font-size:11px;padding:6px 12px" onclick="showCardCollection()">🃏 收集冊</button>';
   h+='<button class="btn" style="background:rgba(255,255,255,.06);color:#aaa;font-size:11px;padding:6px 12px" onclick="showOLLCatalog()">📖 OLL圖鑑</button>';
   h+='<button class="btn" style="background:rgba(255,255,255,.06);color:#aaa;font-size:11px;padding:6px 12px" onclick="showPLLCatalog()">📖 PLL圖鑑</button>';
   h+='<button class="btn" style="background:rgba(255,255,255,.06);color:#aaa;font-size:11px;padding:6px 12px" onclick="showProgressPage()">📊 進度</button>';
