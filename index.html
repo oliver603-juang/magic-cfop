@@ -2146,7 +2146,7 @@ MDESC_KID['U']='上面 往左推 ⬅';MDESC_KID["U'"]='上面 往右推 ➡';MDE
 MDESC_KID['D']='下面 往右推 ➡';MDESC_KID["D'"]='下面 往左推 ⬅';MDESC_KID['D2']='下面 轉半圈';
 MDESC_KID['L']='左邊 拉下來 ⬇';MDESC_KID["L'"]='左邊 推上去 ⬆';MDESC_KID['L2']='左邊 推兩次';
 MDESC_KID['F']='正面 順時針轉 ↻';MDESC_KID["F'"]='正面 逆時針轉 ↺';MDESC_KID['F2']='正面 轉半圈';
-MDESC_KID['B']='後面 順時針轉 ↻';MDESC_KID["B'"]='後面 逆時針轉 ↺';MDESC_KID['B2']='後面 轉半圈';
+MDESC_KID['B']='後面 右邊往上推 ⬆';MDESC_KID["B'"]='後面 右邊往下拉 ⬇';MDESC_KID['B2']='後面 轉半圈';
 window.CN={W:'白',B:'藍',R:'紅',Y:'黃',G:'綠',O:'橘'};
 
 // ===== cube-scan: SCAN_CONFIG =====
@@ -2897,6 +2897,13 @@ function bridgeToCFOP(kSolution){
 }
 
 function showModeSelect(){
+  // v54: UI 路由防護 — 無論從哪條路徑進來，都確保容器可見
+  // (修復: startCFOPGuided 驗證失敗、訓練選單返回等路徑 topBar/botBar 隱藏、solveUI 蓋住畫面)
+  var _sui=document.getElementById('solveUI');if(_sui)_sui.style.display='none';
+  var _dov=document.getElementById('doneOv');if(_dov)_dov.classList.remove('show');
+  var _sov=document.getElementById('startOv');if(_sov){_sov.classList.remove('show');_sov.style.display='none';}
+  document.getElementById('topBar').style.display='block';
+  document.getElementById('botBar').style.display='block';
   const cnt={};['U','R','F','D','L','B'].forEach(f=>faceColors[f].forEach(c=>{cnt[c]=(cnt[c]||0)+1;}));
   const ok=Object.values(cnt).every(v=>v===9)&&Object.keys(cnt).length===6;
   if(!ok){
@@ -4625,7 +4632,7 @@ function showSolveStep(){
     var tW=(fW+g)*3,tH=(fW+g)*4+10;
     var dW=tW,dH=tH;
     var df={};var mf=mv[0];['U','L','F','R','D','B'].forEach(function(f){var aff=MOVE_AFFECTED[mf]&&MOVE_AFFECTED[mf][f]?MOVE_AFFECTED[mf][f]:[];df[f]=[];for(var i=0;i<9;i++)df[f].push(aff.indexOf(i)>=0);});
-    var lb={U:'上',L:'左',F:'前',R:'右',D:'下',B:'後'};
+    var lb={U:'上',L:'左',F:'前',R:'右',D:'下',B:'後(上下翻看)'};
     var rf=renderFace6;
     var svg='<svg viewBox="0 0 '+tW+' '+tH+'" width="'+dW+'" height="'+dH+'" >';
     ['U','L','F','R','D','B'].forEach(function(f){var p=pos[f];svg+='<text x="'+(p.x+fW/2)+'" y="'+(p.y-1)+'" text-anchor="middle" font-size="'+(cs*0.3)+'" fill="rgba(255,255,255,.4)">'+lb[f]+'</text>';svg+=rf(aS2[f],df[f],p.x,p.y,cs,f==='B');});
