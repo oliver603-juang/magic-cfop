@@ -3089,6 +3089,9 @@ function tryAutoRepair(fl,attempt){
 
 function beginSolve(){
   solveStep=-1;
+  // v55: 重置圖案卡狀態
+  window._cardAck={};
+  var _pcard=document.getElementById('patternCard');if(_pcard)_pcard.remove();
   // Always use faceColors (physical cube) — no autofix means 0 diffs guaranteed
   ['U','R','F','D','L','B'].forEach(f=>cubeState[f]=[...faceColors[f]]);
   try{if(vid&&vid.srcObject){vid.srcObject.getTracks().forEach(t=>t.stop());vid.srcObject=null;}}catch(e){}
@@ -4576,6 +4579,94 @@ var levelMgr={
   }
 };
 
+// ===== v55: 公式段圖案卡（先認圖 → 先猜後教） =====
+// 黃面圖案圖：中央3x3 = D面(把魔方「往前翻兩下」黃面朝上時看到的樣子)，外圈12格 = 相鄰側面貼紙
+function yellowFaceSVG(st,mode){
+  var sz=30,g=3,t=16;
+  var W=2*t+3*sz+8*g;
+  var x0=t+2*g,y0=t+2*g;
+  var CM={W:'#f5f5f5',B:'#0051BA',R:'#C41E3A',Y:'#FFD500',G:'#009E60',O:'#FF5800'};
+  function col(c){return mode==='OLL'?(c==='Y'?'#FFD500':'#3a3f47'):(CM[c]||'#3a3f47');}
+  function rect(x,y,w,h,c){return '<rect x="'+x+'" y="'+y+'" width="'+w+'" height="'+h+'" rx="3" fill="'+c+'" stroke="rgba(0,0,0,.45)" stroke-width="1"/>';}
+  var s='<svg viewBox="0 0 '+W+' '+W+'" width="150" height="150">';
+  for(var r=0;r<3;r++)for(var cc=0;cc<3;cc++){s+=rect(x0+cc*(sz+g),y0+r*(sz+g),sz,sz,col(st.D[r*3+cc]));}
+  // 外圈：上=F底列(F6,F7,F8) 左=L(8,7,6) 右=R(6,7,8) 下=B(8,7,6) — 依 x2 翻面視角推導
+  var top=[st.F[6],st.F[7],st.F[8]],left=[st.L[8],st.L[7],st.L[6]],right=[st.R[6],st.R[7],st.R[8]],bot=[st.B[8],st.B[7],st.B[6]];
+  var yb=y0+3*sz+3*g, xr=x0+3*sz+3*g;
+  for(var i=0;i<3;i++){
+    s+=rect(x0+i*(sz+g),g,sz,t-g,col(top[i]));
+    s+=rect(x0+i*(sz+g),yb,sz,t-g,col(bot[i]));
+    s+=rect(g,y0+i*(sz+g),t-g,sz,col(left[i]));
+    s+=rect(xr,y0+i*(sz+g),t-g,sz,col(right[i]));
+  }
+  return s+'</svg>';
+}
+function _fmtMoves(arr){return arr.map(function(m){return '<span style="display:inline-block;padding:3px 7px;margin:2px;border-radius:6px;background:rgba(255,255,255,.1);font-family:monospace;font-weight:800;font-size:15px;color:#FFD700">'+m+'</span>';}).join('');}
+function showPatternCard(mk,stepIdx){
+  var end=solution.length,ms=window._lblStageMarkers||[];
+  for(var i=0;i<ms.length;i++){if(ms[i].idx>stepIdx){end=ms[i].idx;break;}}
+  var segMoves=solution.slice(stepIdx,end);
+  var segStr=segMoves.join(' ');
+  var st={};['U','R','F','D','L','B'].forEach(function(f){st[f]=cubeState[f].slice();});
+  var db=(mk.stage==='OLL'?OLL_DB:PLL_DB);
+  var hit=null;for(var d=0;d<db.length;d++){if(db[d].moves.join(' ')===segStr){hit=db[d];break;}}
+  var name=hit?hit.nick:mk.explain;
+  var tip=hit&&hit.tip?hit.tip:'';
+  var key='CARD_'+mk.stage+'_'+name;
+  var p=loadProgress();var seen=(p[key]&&p[key].n)||0;p[key]={n:seen+1};saveProgress(p);
+  var quiz=seen>=1;
+  var old=document.getElementById('patternCard');if(old)old.remove();
+  var card=document.createElement('div');card.id='patternCard';
+  card.style.cssText='position:absolute;inset:0;z-index:60;background:rgba(0,0,0,.93);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:12px;overflow-y:auto';
+  card.onclick=function(e){e.stopPropagation();};
+  var h='<div style="font-size:12px;font-weight:800;color:#00D2FF">'+mk.stage+' 圖案卡</div>';
+  h+='<div style="font-size:20px;font-weight:900;color:#FFD700;margin:4px 0">'+name+'</div>';
+  h+='<div style="margin:6px 0">'+yellowFaceSVG(st,mk.stage)+'</div>';
+  h+='<div style="font-size:12px;color:#00E676;font-weight:800">🔄 把魔方「往前翻兩下」讓黃面朝上，對照圖案<br><span style="color:rgba(255,255,255,.45);font-weight:400;font-size:11px">（不要左右翻會鏡像！認完翻回白面朝上再開始轉）</span></div>';
+  if(tip)h+='<div style="font-size:11px;color:rgba(255,255,255,.5);margin-top:4px">💡 '+tip+'</div>';
+  if(!quiz){
+    h+='<div style="font-size:11px;color:rgba(255,255,255,.4);margin-top:10px">這個圖案的公式（'+segMoves.length+'步）：</div>';
+    h+='<div style="max-width:320px;margin:4px 0">'+_fmtMoves(segMoves)+'</div>';
+    h+='<button class="btn" style="margin-top:12px" onclick="_cardGo('+stepIdx+')">✅ 記住了，開始轉！</button>';
+  }else{
+    var pool=[];for(var d2=0;d2<db.length;d2++){var f2=db[d2].moves.join(' ');if(f2!==segStr)pool.push(f2);}
+    for(var s2=pool.length-1;s2>0;s2--){var j=Math.floor(Math.random()*(s2+1));var tv=pool[s2];pool[s2]=pool[j];pool[j]=tv;}
+    var opts=[segStr].concat(pool.slice(0,2));
+    for(var s3=opts.length-1;s3>0;s3--){var j2=Math.floor(Math.random()*(s3+1));var tv2=opts[s3];opts[s3]=opts[j2];opts[j2]=tv2;}
+    h+='<div style="font-size:13px;font-weight:900;color:#fff;margin-top:8px">🤔 先猜猜看：這個圖案要用哪條公式？</div>';
+    h+='<div id="quizOpts" style="max-width:340px">';
+    for(var oi=0;oi<opts.length;oi++){
+      h+='<div class="quizOpt" data-ok="'+(opts[oi]===segStr?1:0)+'" style="margin:8px 0;padding:8px;border:1px solid rgba(255,255,255,.2);border-radius:10px;cursor:pointer;background:rgba(255,255,255,.04)">'+_fmtMoves(opts[oi].split(' '))+'</div>';
+    }
+    h+='</div><div id="quizMsg" style="font-size:13px;font-weight:900;margin-top:4px"></div>';
+  }
+  card.innerHTML=h;
+  document.querySelector('.wrap').appendChild(card);
+  if(quiz){
+    var answered=false;
+    card.querySelectorAll('.quizOpt').forEach(function(el){
+      el.onclick=function(e){
+        e.stopPropagation();if(answered)return;
+        var ok=el.getAttribute('data-ok')==='1';
+        var kq='QUIZ_'+mk.stage+'_'+name;var pq=loadProgress();var rq=pq[kq]||{t:0,c:0,s:0};
+        if(ok){answered=true;el.style.border='2px solid #00E676';el.style.background='rgba(0,230,118,.15)';
+          document.getElementById('quizMsg').innerHTML='<span style="color:#00E676">✅ 答對了！開始轉！</span>';
+          rq.t++;rq.c++;rq.s++;pq[kq]=rq;saveProgress(pq);
+          setTimeout(function(){_cardGo(stepIdx);},800);
+        }else{el.style.border='2px solid #FF5252';el.style.background='rgba(255,82,82,.15)';el.style.opacity='.6';
+          document.getElementById('quizMsg').innerHTML='<span style="color:#FF5252">❌ 不是這條，再想想～</span>';
+          rq.t++;rq.s=0;pq[kq]=rq;saveProgress(pq);
+        }
+      };
+    });
+  }
+}
+function _cardGo(stepIdx){
+  if(!window._cardAck)window._cardAck={};
+  window._cardAck[stepIdx]=1;
+  var el=document.getElementById('patternCard');if(el)el.remove();
+  showSolveStep();
+}
 function showSolveStep(){
   if(solveStep===-1){solveStep++;if(solveStep>0)applyMove(solution[solveStep-1]);}
   if(solveStep>=solution.length){showConfetti();document.getElementById('solveUI').style.display='none';document.getElementById('doneOv').classList.add('show');return;}
@@ -4584,6 +4675,19 @@ function showSolveStep(){
     var _sv={U:'W',R:'B',F:'R',D:'Y',L:'G',B:'O'};var _isSolved=true;
     ['U','R','F','D','L','B'].forEach(function(f){for(var i=0;i<9;i++)if(cubeState[f][i]!==_sv[f])_isSolved=false;});
     if(_isSolved){solveStep=solution.length;showConfetti();document.getElementById('solveUI').style.display='none';document.getElementById('doneOv').classList.add('show');return;}
+  }
+  // v55: OLL/PLL 公式段開始 → 圖案卡（第一次教學，之後先猜後教）
+  if(solveMode==='cfop'&&window._lblStageMarkers&&solveStep>=0&&solveStep<solution.length){
+    var _mk=null;
+    for(var _mi=0;_mi<window._lblStageMarkers.length;_mi++){if(window._lblStageMarkers[_mi].idx===solveStep){_mk=window._lblStageMarkers[_mi];break;}}
+    if(_mk&&(_mk.stage==='OLL'||_mk.stage==='PLL')){
+      var _mkEnd=solution.length;
+      for(var _mj=0;_mj<window._lblStageMarkers.length;_mj++){if(window._lblStageMarkers[_mj].idx>solveStep){_mkEnd=window._lblStageMarkers[_mj].idx;break;}}
+      if(_mkEnd-solveStep>=5){
+        if(!window._cardAck)window._cardAck={};
+        if(!window._cardAck[solveStep]){showPatternCard(_mk,solveStep);return;}
+      }
+    }
   }
   // === Level transition check ===
   if(levelMgr.current>0&&levelMgr.current<3){
